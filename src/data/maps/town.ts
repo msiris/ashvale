@@ -15,7 +15,7 @@ import type { MapObject, Terrain, TileMapData } from '@/types/map';
 import { TOWN_MAX, inRect, playableRect } from '@/data/eras';
 import { visualStage, wallStage } from '@/data/buildings';
 import { createRng } from '@/systems/rng';
-import { companionSprite } from '@/data/sprites';
+import { companionSprite, patronSprite } from '@/data/sprites';
 
 const W = TOWN_MAX.width;
 const H = TOWN_MAX.height;
@@ -60,6 +60,11 @@ export interface TownContext {
    * 이제 명단에서 온다 — 상태가 정하고 맵은 그리기만 한다.
    */
   folk?: { id: string; archetypeId: string; name: string }[];
+  /**
+   * 회관을 나와 마을에 서 있는 의뢰인 (§7.6 나들이).
+   * 다가오지는 않는다 — 찾아가야 만나는 건 그대로다.
+   */
+  patronOut?: { id: string; name: string; badge?: 'offer' | 'report' };
 }
 
 /**
@@ -89,7 +94,8 @@ export function townKey(ctx: TownContext): string {
   // 누가 마을에 서 있는지도 열쇠에 넣는다. 안 그러면 명단이 바뀌어도 다시 안 그린다
   // 이름도 넣는다. 이름을 바꿨는데 이름표가 그대로면 안 바꾼 것과 같다
   const who = (ctx.folk ?? []).map((f) => `${f.id}@${f.archetypeId}@${f.name}`).join(',');
-  return `town:${ctx.eraIndex}:${levels}:${who}`;
+  const out = ctx.patronOut === undefined ? '' : `${ctx.patronOut.id}${ctx.patronOut.badge ?? ''}`;
+  return `town:${ctx.eraIndex}:${levels}:${who}:${out}`;
 }
 
 export function buildTownMap(ctx: TownContext): TileMapData {
@@ -172,6 +178,27 @@ export function buildTownMap(ctx: TownContext): TileMapData {
     const front = plot.y + plot.h;
     if (!inRect(rect, doorX, front)) continue;
     if (collision[front * W + doorX]) put(doorX, front, 'path', false);
+  }
+
+  /**
+   * 회관을 나와 있는 의뢰인 (§7.6 나들이).
+   * 길목 가는 길가에 세운다 — 지나다니다 마주치게.
+   */
+  if (ctx.patronOut !== undefined) {
+    const spot = { x: GATEWAY_X + 2, y: rect.y1 - 4 };
+    if (inRect(rect, spot.x, spot.y) && !collision[spot.y * W + spot.x]) {
+      objects.push({
+        id: `patron-${ctx.patronOut.id}`,
+        type: 'npc',
+        x: spot.x,
+        y: spot.y,
+        sprite: patronSprite(ctx.patronOut.id),
+        voice: { kind: 'patron', id: ctx.patronOut.id },
+        label: ctx.patronOut.name,
+        ...(ctx.patronOut.badge !== undefined ? { badge: ctx.patronOut.badge } : {}),
+        solid: true,
+      });
+    }
   }
 
   // ── 성벽 링 ────────────────────────────────────────

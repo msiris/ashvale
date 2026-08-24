@@ -25,7 +25,9 @@ import { RELICS } from '@/data/content/world-content';
 import { ERAS, eraName } from '@/data/eras';
 import { SEASON_LABEL, seasonOf } from '@/data/seasons';
 import { TOUCH_MIN } from '@/data/layout';
-import { activeQuest, isComplete, offerFor, progressText } from '@/systems/quests';
+import { activeQuest, anyOfferFor, isComplete, progressText } from '@/systems/quests';
+import { patronOutingOf } from '@/systems/outing';
+import { PATRON_ERA_MIN } from '@/data/maps/indoor';
 import { PATRON_VOICES } from '@/data/content/patron-dialogue';
 
 const STAT_LABEL: Record<StatId, string> = {
@@ -78,9 +80,16 @@ export function StatusPanel() {
   const held = RELICS.filter((relic) => hero.relics.includes(relic.id));
   const active = activeQuest(state);
   // 지금 맡을 수 있는 의뢰. 하나를 맡고 있으면 offerFor 가 비어 나온다
+  // 고유 의뢰와 다시 오는 의뢰를 함께 본다 (§7.6)
   const offers = Object.keys(PATRON_VOICES)
-    .map((id) => offerFor(state, id))
+    .map((id) => anyOfferFor(state, id))
     .filter((q): q is NonNullable<typeof q> => q !== null);
+  // 밖에 나와 있으면 회관이 아니라 마을에서 만난다
+  const outPatron = patronOutingOf(
+    state,
+    Object.keys(PATRON_VOICES).filter((id) => state.world.eraIndex >= (PATRON_ERA_MIN[id] ?? 99)),
+  );
+  const whereToFind = (id: string) => (id === outPatron ? '마을에 나와 있다' : '회관');
   const patronName = (id: string) => PATRON_VOICES[id]?.name ?? id;
 
   return (
@@ -234,8 +243,8 @@ export function StatusPanel() {
             />
             <p className={`mt-1 text-[11px] ${isComplete(state, active) ? 'text-gold' : 'text-inkSoft'}`}>
               {isComplete(state, active)
-                ? `회관에서 ${patronName(active.patronId)}에게 보고하면 끝난다.`
-                : '조건을 채우면 회관에서 보고한다.'}
+                ? `${patronName(active.patronId)}에게 보고하면 끝난다 — ${whereToFind(active.patronId)}.`
+                : '조건을 채우면 찾아가 보고한다.'}
             </p>
           </>
         ) : offers.length > 0 ? (
@@ -244,16 +253,19 @@ export function StatusPanel() {
               <Row
                 key={q.id}
                 label={`${patronName(q.patronId)} · ${q.name}`}
-                value={q.reward.kind === 'companion' ? '보상 — 사람이 온다' : q.goalText}
+                value={
+                  (q.reward.kind === 'companion' ? '보상 — 사람이 온다 · ' : '') +
+                  `${q.goalText} · ${whereToFind(q.patronId)}`
+                }
               />
             ))}
             <p className="mt-1 text-[11px] text-gold">
-              회관에 가서 말을 걸면 맡을 수 있다. 한 번에 하나씩.
+              머리 위에 느낌표가 뜬 사람에게 말을 걸면 맡을 수 있다. 한 번에 하나씩.
             </p>
           </>
         ) : (
           <p className="text-[11px] text-inkSoft">
-            지금 받을 의뢰가 없다. 시대가 오르면 의뢰인이 더 온다.
+            지금 받을 의뢰가 없다. 몇 주 지나면 의뢰인이 다시 부탁한다.
           </p>
         )}
       </section>

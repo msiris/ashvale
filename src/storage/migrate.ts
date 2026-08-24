@@ -55,6 +55,16 @@ const MIGRATIONS: Record<number, Migration> = {
     }
     return { ...raw, schemaVersion: 5, companions: moved };
   },
+
+  /** 5 -> 6: PatronRecord.lastQuestTurn 추가. 아직 마친 적 없으면 -1 */
+  5: (raw) => {
+    const patrons = isRecord(raw['patrons']) ? raw['patrons'] : {};
+    const moved: Record<string, unknown> = {};
+    for (const [id, who] of Object.entries(patrons)) {
+      moved[id] = isRecord(who) ? { lastQuestTurn: -1, ...who } : who;
+    }
+    return { ...raw, schemaVersion: 6, patrons: moved };
+  },
 };
 
 export type MigrateResult =

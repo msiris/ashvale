@@ -59,8 +59,8 @@ export function buildingIdFromIndoor(mapId: string): string | null {
   return mapId.startsWith('indoor:') ? mapId.slice('indoor:'.length) : null;
 }
 
-/** 시대별 등장 의뢰인 (§7.6). 전부 회관에 있다 */
-const PATRON_ERA: Record<string, number> = {
+/** 시대별 등장 의뢰인 (§7.6). 회관이 집이고, 가끔 밖에 나간다 */
+export const PATRON_ERA_MIN: Record<string, number> = {
   bartek: 0,
   tova: 1,
   harl: 1,
@@ -79,6 +79,10 @@ export interface IndoorContext {
    * 숙소에만 붙박여 있으면 찾아갈 이유가 한 곳뿐이다.
    */
   visitor?: { id: string; archetypeId: string; name: string };
+  /** 머리 위에 표를 달 의뢰인 (§7.6). patronId -> 표 종류 */
+  patronMarks?: Record<string, 'offer' | 'report'>;
+  /** 이번 주 밖에 나가 있어 회관에 없는 의뢰인 */
+  patronAway?: string;
 }
 
 export function buildIndoorMap(ctx: IndoorContext): TileMapData {
@@ -276,7 +280,7 @@ export function buildIndoorMap(ctx: IndoorContext): TileMapData {
   // 의뢰인은 회관에 상주한다 (§7.6, §10)
   if (ctx.buildingId === 'hall') {
     const present = Object.keys(PATRON_VOICES).filter(
-      (id) => ctx.eraIndex >= (PATRON_ERA[id] ?? 99),
+      (id) => ctx.eraIndex >= (PATRON_ERA_MIN[id] ?? 99) && id !== ctx.patronAway,
     );
     /**
      * 탁자 앞에 나란히 선다.
@@ -301,6 +305,9 @@ export function buildIndoorMap(ctx: IndoorContext): TileMapData {
         sprite: patronSprite(patronId),
         voice: { kind: 'patron', id: patronId },
         label: PATRON_VOICES[patronId]?.name ?? '',
+        ...(ctx.patronMarks?.[patronId] !== undefined
+          ? { badge: ctx.patronMarks[patronId] }
+          : {}),
         solid: true,
       });
     });

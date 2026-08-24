@@ -14,7 +14,7 @@ import { useGameStore } from '@/store/useGameStore';
 import type { GameState } from '@/types/game';
 import { buildPatronScript, buildScript, type PatronContext } from '@/systems/dialogue';
 import { toneFor } from '@/systems/relationships';
-import { activeQuest, isComplete, offerFor } from '@/systems/quests';
+import { activeQuest, anyOfferFor, isComplete } from '@/systems/quests';
 import { buildingIdFromIndoor, hasIndoor } from '@/data/maps/indoor';
 import { FieldScene } from './FieldScene';
 
@@ -26,7 +26,8 @@ function patronContext(state: GameState, patronId: string): PatronContext {
 
   return {
     trust: record?.trust ?? 0,
-    offer: offerFor(state, patronId) ?? undefined,
+    // 고유 의뢰를 다 마쳤으면 다시 오는 의뢰가 나온다 (§7.6)
+    offer: anyOfferFor(state, patronId) ?? undefined,
     completed: mine && isComplete(state, active) ? active : undefined,
     inProgress: mine && !isComplete(state, active),
   };

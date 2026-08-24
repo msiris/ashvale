@@ -54,7 +54,7 @@ import { buildSceneScripts, nextFieldScene, nextRomanceScene } from '@/systems/s
 import { buildRivalScript, rivalDeltas } from '@/systems/rivals';
 import { RIVAL_AFFINITY } from '@/data/content/rival-events';
 import type { RivalPick } from '@/systems/rivals';
-import { getQuest } from '@/data/quests';
+import { getQuest, REPEAT_PREFIX } from '@/data/quests';
 import type { RegionEvent } from '@/data/content/region-events';
 import { applyRegionChoice, fillEventText, pickRegionEvent } from '@/systems/regionEvents';
 import { outingOf } from '@/systems/outing';
@@ -604,6 +604,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               met: true,
               trust: p?.trust ?? 0,
               questsCleared: p?.questsCleared ?? [],
+              lastQuestTurn: p?.lastQuestTurn ?? -1,
               activeQuestId: effect.questAccept,
             },
           },
@@ -625,7 +626,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
               [holder.id]: {
                 ...holder,
                 trust: Math.min(TRUST_MAX, holder.trust + TRUST.questCleared),
-                questsCleared: [...holder.questsCleared, quest.id],
+                /**
+                 * 다시 오는 의뢰는 목록에 쌓지 않는다 — 회차마다 id 가 달라
+                 * 쌓으면 세이브가 끝없이 자란다. 간격은 lastQuestTurn 이 센다.
+                 */
+                questsCleared: quest.id.startsWith(`${REPEAT_PREFIX}:`)
+                  ? holder.questsCleared
+                  : [...holder.questsCleared, quest.id],
+                lastQuestTurn: next.world.turn,
                 activeQuestId: null,
               },
             },
@@ -659,6 +667,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
             if (grown !== null) {
               next = grown.state;
               toast.push(`${displayName(grown.companion)} 합류`);
+            } else {
+              // 명단이 찼다 (§7.1 상한 8명). 빈손으로 돌려보내지 않는다
+              next = { ...next, resources: { ...next.resources, gold: next.resources.gold + 40 } };
+              toast.push('명단이 찼다 · 금화 +40');
             }
           }
         }
@@ -888,6 +900,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       met: true,
       trust,
       questsCleared: existing?.questsCleared ?? [],
+      lastQuestTurn: existing?.lastQuestTurn ?? -1,
       activeQuestId: existing?.activeQuestId ?? null,
     };
 

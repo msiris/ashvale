@@ -40,6 +40,10 @@ export interface MapContext extends TownContext {
    * 이 값이 열쇠에 들어가야 갈 때마다 새 지도가 나온다.
    */
   visit?: number;
+  /** 머리 위에 표를 달 의뢰인 (§7.6) */
+  patronMarks?: Record<string, 'offer' | 'report'>;
+  /** 이번 주 밖에 나가 있는 의뢰인 (§7.6). 회관에서 빠지고 마을에 선다 */
+  patronAway?: string;
 }
 
 const cache = new Map<string, TileMapData>();
@@ -52,7 +56,13 @@ export function mapKey(ctx: MapContext): string {
     const who = (ctx.residents ?? []).map((r) => `${r.id}@${r.name}`).join(',');
     // 나와 있는 사람이 바뀌면 다시 그린다
     const guest = ctx.visitor === undefined ? '' : `${ctx.visitor.id}@${ctx.visitor.name}`;
-    return `${ctx.mapId}:${ctx.eraIndex}:${who}:${guest}`;
+    // 표가 붙거나 떨어지면 다시 그려야 한다
+    const away = ctx.patronAway ?? '';
+    const marks = Object.entries(ctx.patronMarks ?? {})
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([id, kind]) => `${id}${kind}`)
+      .join(',');
+    return `${ctx.mapId}:${ctx.eraIndex}:${who}:${guest}:${marks}:${away}`;
   }
   if (regionIdFromMap(ctx.mapId) !== null) {
     const trip = ctx.visit ?? 0;
@@ -80,6 +90,8 @@ export function loadMap(ctx: MapContext): TileMapData {
       eraIndex: ctx.eraIndex,
       ...(ctx.residents !== undefined ? { residents: ctx.residents } : {}),
       ...(ctx.visitor !== undefined ? { visitor: ctx.visitor } : {}),
+      ...(ctx.patronMarks !== undefined ? { patronMarks: ctx.patronMarks } : {}),
+      ...(ctx.patronAway !== undefined ? { patronAway: ctx.patronAway } : {}),
     });
   } else {
     throw new Error(`맵 '${ctx.mapId}' 가 없다. src/systems/map.ts 의 loadMap 에 추가하라.`);

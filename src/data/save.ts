@@ -13,8 +13,10 @@
  *     새로고침으로 되감을 수 있었다 — 표식 무한 채집과 거래 한도 우회.
  * 5 — CompanionRecord.pickedSlot 추가. 여섯 슬롯 중 어느 것을 보일지
  *     플레이어가 고른다. 해금 사다리가 구현된 적이 없어 0번만 보였다.
+ * 6 — PatronRecord.lastQuestTurn 추가. 의뢰를 몇 주 뒤에 다시 받을 수 있게
+ *     하려면 마지막으로 마친 주차가 필요하다.
  */
-export const SCHEMA_VERSION = 5 as const;
+export const SCHEMA_VERSION = 6 as const;
 
 /** 원장 스키마 판. 세이브와 따로 움직인다 */
 export const LEDGER_VERSION = 1 as const;

@@ -76,6 +76,15 @@ export interface PatronRecord {
   trust: number;
   questsCleared: string[];
   activeQuestId: string | null;
+  /**
+   * 마지막으로 의뢰를 마친 주차. 아직 없으면 -1 (§7.6).
+   *
+   * **§4 에 없던 칸이다.** 의뢰인마다 고유 의뢰가 하나뿐이라 그걸 마치면
+   * 그 사람은 영영 할 말이 없어졌다. 몇 주 지나면 다시 부탁할 수 있게
+   * 하려면 마지막이 언제였는지 알아야 한다. 세션에만 두면 새로고침으로
+   * 간격을 건너뛴다.
+   */
+  lastQuestTurn: number;
 }
 
 export interface HeroState {
@@ -148,7 +157,7 @@ export interface Counters {
 }
 
 export interface GameState {
-  schemaVersion: 5;
+  schemaVersion: 6;
   createdAt: number;
 
   hero: HeroState;

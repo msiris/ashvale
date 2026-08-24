@@ -7,14 +7,16 @@
  * 아래 조건은 이미 있는 시스템으로 검사할 수 있게 내가 잡은 잠정치다.
  */
 
-import type { FactionId } from '@/types/game';
+import type { FactionId, ResourceId } from '@/types/game';
 
 /** 무엇을 채워야 하는가. 전부 지금 있는 상태로 검사할 수 있는 것들이다 */
 export type QuestGoal =
   | { kind: 'expeditions'; count: number }
   | { kind: 'building'; buildingId: string; level: number }
   | { kind: 'faction'; faction: FactionId; value: number }
-  | { kind: 'power'; value: number };
+  | { kind: 'power'; value: number }
+  /** 자원을 그만큼 들고 있으면 된다. 다시 오는 의뢰가 쓴다 */
+  | { kind: 'resource'; resource: ResourceId; value: number };
 
 export type QuestReward =
   /** 새 관계 대상이 들어온다 (§7.1 상한 8명) */
@@ -23,6 +25,14 @@ export type QuestReward =
   | { kind: 'region'; regionId: string }
   /** 자재 지원 */
   | { kind: 'resources'; wood?: number; stone?: number; gold?: number };
+
+/**
+ * 다시 오는 의뢰의 id 는 `rep:<의뢰인>:<회차>:<틀>` 이다.
+ *
+ * **의뢰 객체를 세이브에 담지 않는다.** id 만 있으면 언제든 같은 의뢰를
+ * 되살릴 수 있게 만들었다 — 담으면 모양이 바뀔 때마다 마이그레이션이 붙는다.
+ */
+export const REPEAT_PREFIX = 'rep';
 
 export interface QuestDef {
   id: string;

@@ -67,3 +67,23 @@ export function visitorAt(state: GameState, buildingId: string): CompanionRecord
 export function isOut(state: GameState, companionId: string): boolean {
   return outingOf(state)?.companionId === companionId;
 }
+
+/**
+ * 의뢰인 나들이 (§7.6).
+ *
+ * 의뢰인이 회관에만 있으니 마을이 텅 비어 보인다. 주마다 한 명은 밖에 나와
+ * 마을에 서 있다. **다가오지는 않는다** — §7.6 의 "의뢰인은 찾아가야 만난다"
+ * 는 그대로다. 다만 찾아갈 곳이 회관 하나가 아니게 된다.
+ *
+ * 관계 대상 나들이와 다른 씨앗을 쓴다. 안 그러면 둘이 늘 같은 주에 움직인다.
+ */
+const PATRON_OUT_CHANCE = 0.5;
+
+export function patronOutingOf(state: GameState, patronIds: string[]): string | null {
+  const here = patronIds.filter((id) => state.patrons[id] !== undefined || true);
+  if (here.length === 0) return null;
+
+  const rng = createRng(`${seedOf(state)}:patron-out:${state.world.turn}`);
+  if (!rng.chance(PATRON_OUT_CHANCE)) return null;
+  return rng.pick(here) ?? null;
+}

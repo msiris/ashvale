@@ -20,7 +20,10 @@ import { interactionAt, resolveMove, type HeroTile } from '@/systems/movement';
 import { residentsOf, townFolk } from '@/systems/roster';
 import { displayName } from '@/systems/relationships';
 import { companionSprite } from '@/data/sprites';
-import { isOut, visitorAt } from '@/systems/outing';
+import { patronMark } from '@/systems/quests';
+import { PATRON_VOICES } from '@/data/content/patron-dialogue';
+import { PATRON_ERA_MIN } from '@/data/maps/indoor';
+import { isOut, patronOutingOf, visitorAt } from '@/systems/outing';
 import { buildingIdFromIndoor } from '@/data/maps/indoor';
 import { drawPlaceholder } from '@/render/placeholder';
 import { paintMapCanvas } from '@/render/terrain';
@@ -30,6 +33,8 @@ import {
   drawSpentMarker,
   drawSpotMarker,
   drawEscortMarker,
+  drawOfferBadge,
+  drawReportBadge,
 } from '@/render/markers';
 import { readInput } from './inputBus';
 import { play } from '@/audio/sfx';
@@ -177,6 +182,15 @@ export class FieldScene extends Phaser.Scene {
       }
     }
 
+    /**
+     * 이번 주 회관을 나와 있는 의뢰인 (§7.6 나들이).
+     * 그 시대에 나온 사람 중에서만 뽑는다 — 아직 없는 사람이 밖에 서 있으면 안 된다.
+     */
+    const outPatron = patronOutingOf(
+      state,
+      Object.keys(PATRON_VOICES).filter((id) => state.world.eraIndex >= (PATRON_ERA_MIN[id] ?? 99)),
+    );
+
     const ctx: MapContext = {
       mapId: state.world.currentMap,
       eraIndex: state.world.eraIndex,
@@ -191,6 +205,26 @@ export class FieldScene extends Phaser.Scene {
       escorted: state.escort !== null,
       // 갈 때마다 새 지형. 그 탐사 안에서는 주차가 안 바뀌므로 고정이다 (§11)
       visit: state.world.turn,
+      // 누구에게 볼 일이 있는지 (§7.6). 머리 위 표로 나간다
+      patronMarks: Object.fromEntries(
+        Object.keys(PATRON_VOICES)
+          .filter((id) => id !== outPatron)
+          .map((id) => [id, patronMark(state, id)] as const)
+          .filter((pair): pair is readonly [string, 'offer' | 'report'] => pair[1] !== null),
+      ),
+      // 회관을 나와 마을에 서 있는 의뢰인 (§7.6). 회관에서는 빠진다
+      ...(outPatron !== null
+        ? {
+            patronOut: {
+              id: outPatron,
+              name: PATRON_VOICES[outPatron]?.name ?? '',
+              ...(patronMark(state, outPatron) !== null
+                ? { badge: patronMark(state, outPatron) as 'offer' | 'report' }
+                : {}),
+            },
+            patronAway: outPatron,
+          }
+        : {}),
       folk: townFolk(state)
         .filter((c) => !isOut(state, c.id))
         .map((c) => ({ id: c.id, archetypeId: c.archetypeId, name: displayName(c) })),
@@ -319,6 +353,8 @@ export class FieldScene extends Phaser.Scene {
     this.ensureMarkerTexture('marker:spent', drawSpentMarker);
     this.ensureMarkerTexture('marker:spot', drawSpotMarker);
     this.ensureMarkerTexture('marker:escort', drawEscortMarker);
+    this.ensureMarkerTexture('badge:offer', drawOfferBadge);
+    this.ensureMarkerTexture('badge:report', drawReportBadge);
 
     /**
      * 실내에서 일을 보는 자리 (§10).
@@ -482,6 +518,35 @@ export class FieldScene extends Phaser.Scene {
       if (this.ensureAnims(obj.sprite)) sprite.setFrame(frameIndex('down', IDLE_FRAME));
       this.npcLayer?.add(sprite);
       this.makeNameTag(sprite, obj.label ?? '');
+
+      /**
+       * 볼 일이 있으면 머리 위에 표를 세운다 (§7.6).
+       *
+       * 회관에 여섯이 서 있는데 누구에게 볼 일이 있는지 알 방법이 없었다 —
+       * 하나씩 붙잡고 말을 걸어 봐야 했다.
+       */
+      if (obj.badge !== undefined) {
+        const bang = this.add.image(
+          worldX(obj.x),
+          worldY(obj.y) - CHAR_SHEET.frameHeight,
+          obj.badge === 'report' ? 'badge:report' : 'badge:offer',
+        );
+        bang.setOrigin(0.5, 1);
+        bang.setDepth(worldY(obj.y) + 1);
+        this.npcLayer?.add(bang);
+
+        // 눈에 걸리게 조금 까딱인다. 움직임을 줄여 뒀으면 가만히 둔다
+        if (!this.reducedMotion) {
+          this.tweens.add({
+            targets: bang,
+            y: bang.y - 2,
+            duration: 700,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.InOut',
+          });
+        }
+      }
     }
   }
 

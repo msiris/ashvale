@@ -159,3 +159,30 @@ export function drawEscortMarker(ctx: CanvasRenderingContext2D): void {
   px(ctx, 4, 13, 3, 1);
   px(ctx, 9, 13, 3, 1);
 }
+
+/**
+ * 머리 위 느낌표 (§7.6).
+ *
+ * 회관에 의뢰인이 여섯이나 서 있는데 누가 볼 일이 있는지 알 방법이
+ * 없었다 — 하나씩 붙잡고 말을 걸어 봐야 했다.
+ *
+ * 색으로 갈린다. 내줄 의뢰는 금색, 보고할 것은 초록.
+ */
+function drawBang(ctx: CanvasRenderingContext2D, body: string): void {
+  // 테두리를 먼저 깔아 어떤 바닥에서도 읽히게
+  ctx.fillStyle = PALETTE.ink;
+  px(ctx, 6, 1, 4, 11);
+  px(ctx, 5, 2, 6, 9);
+
+  ctx.fillStyle = body;
+  px(ctx, 7, 2, 2, 6);
+  px(ctx, 7, 9, 2, 2);
+}
+
+export function drawOfferBadge(ctx: CanvasRenderingContext2D): void {
+  drawBang(ctx, PALETTE.flameBright);
+}
+
+export function drawReportBadge(ctx: CanvasRenderingContext2D): void {
+  drawBang(ctx, PALETTE.grassLight);
+}
