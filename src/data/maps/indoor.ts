@@ -278,15 +278,26 @@ export function buildIndoorMap(ctx: IndoorContext): TileMapData {
     const present = Object.keys(PATRON_VOICES).filter(
       (id) => ctx.eraIndex >= (PATRON_ERA[id] ?? 99),
     );
+    /**
+     * 탁자 앞에 나란히 선다.
+     *
+     * 예전에는 `4 + i * 2` 에 `x >= W - 2` 면 **조용히 버렸다.** W 가 13 이라
+     * 다섯째부터 잘려서 성장기의 도란과 영주기의 벨이 회관에 없었다 —
+     * 둘 다 사람을 주는 의뢰인이라, 전설기까지 가도 명단이 늘지 않는 원인이었다.
+     *
+     * 벽 안쪽(1..W-2)을 한 칸씩 쓰면 여섯이 정확히 들어간다.
+     * 자리가 모자라면 버리지 않고 **윗줄로 접는다** — 사람이 사라지는 것보다
+     * 붐비는 게 낫다.
+     */
     present.forEach((patronId, i) => {
-      // 탁자 앞에 나란히 선다
-      const x = 4 + i * 2;
-      if (x >= W - 2) return;
+      const span = W - 2;
+      const x = 1 + (i % span);
+      const y = 3 + Math.floor(i / span);
       objects.push({
         id: `patron-${patronId}`,
         type: 'npc',
         x,
-        y: 3,
+        y,
         sprite: patronSprite(patronId),
         voice: { kind: 'patron', id: patronId },
         label: PATRON_VOICES[patronId]?.name ?? '',

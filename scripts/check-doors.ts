@@ -80,5 +80,38 @@ for (const eraIndex of [0, 1, 2, 3, 4, 5]) {
   }
 }
 
+/**
+ * 회관에 그 시대의 의뢰인이 **전부** 서 있어야 한다 (§7.6).
+ *
+ * 자리 계산이 `x >= W - 2` 면 조용히 버리고 있었다. 다섯째부터 잘려서
+ * 도란과 벨이 회관에 없었고, 둘 다 사람을 주는 의뢰인이라
+ * 전설기까지 가도 명단이 늘지 않았다. 사람이 사라지는 건 조용히 지나가므로
+ * 여기서 센다.
+ */
+{
+  const PATRON_ERA: Record<string, number> = {
+    bartek: 0, tova: 1, harl: 1, oren: 2, doran: 2, vell: 3,
+  };
+  for (const eraIndex of [0, 1, 2, 3, 4, 5]) {
+    const hall = buildIndoorMap({ buildingId: 'hall', eraIndex });
+    const placed = hall.objects.filter((o) => o.id.startsWith('patron-'));
+    const expected = Object.keys(PATRON_ERA).filter((id) => eraIndex >= (PATRON_ERA[id] ?? 99));
+    const missing = expected.filter((id) => !placed.some((p) => p.id === `patron-${id}`));
+
+    // 서 있어도 말을 걸 수 없으면 없는 것과 같다
+    const walled = placed.filter(
+      (p) => ![[0, 1], [0, -1], [1, 0], [-1, 0]].some(([dx, dy]) => !isBlocked(hall, p.x + dx, p.y + dy)),
+    );
+
+    if (missing.length > 0 || walled.length > 0) {
+      ok = false;
+      console.log(
+        `실패 회관 시대 ${eraIndex} — 빠짐 ${missing.length}명, 말 못 거는 사람 ${walled.length}명`,
+      );
+    }
+  }
+  if (ok) console.log('OK  회관에 그 시대 의뢰인이 전부 서 있고 다 말을 걸 수 있다');
+}
+
 console.log(ok ? 'OK  모든 문의 안팎 자리가 걸을 수 있다' : '실패');
 if (!ok) process.exitCode = 1;
