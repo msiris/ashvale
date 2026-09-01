@@ -65,6 +65,12 @@ const MIGRATIONS: Record<number, Migration> = {
     }
     return { ...raw, schemaVersion: 6, patrons: moved };
   },
+
+  /** 6 -> 7: WorldState.clearedEpisodes 추가. 아직 아무것도 안 끝냈다 */
+  6: (raw) => {
+    const world = isRecord(raw['world']) ? raw['world'] : {};
+    return { ...raw, schemaVersion: 7, world: { ...world, clearedEpisodes: [] } };
+  },
 };
 
 export type MigrateResult =

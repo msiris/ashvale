@@ -21,7 +21,7 @@ export type Track = null | 'bond' | 'romance';
 export type ConfessState = 'none' | 'pending' | 'accepted' | 'declined';
 
 /** 인물이 명단에 들어온 경로 (§7.1) */
-export type CompanionOrigin = 'preset' | 'quest' | 'drifter' | 'referral';
+export type CompanionOrigin = 'preset' | 'quest' | 'drifter' | 'referral' | 'episode';
 
 /**
  * 연대기 한 줄 (§4, §15).
@@ -131,6 +131,16 @@ export interface WorldState {
    * 아무 의미가 없다. 지역에 들어가거나 마을로 돌아올 때 비운다.
    */
   clearedNodes: string[];
+  /**
+   * 끝낸 동화 에피소드 (§11 곁가지).
+   *
+   * **§4 에 없던 칸이다.** 세션에만 두면 새로고침으로 같은 이야기를
+   * 몇 번이고 다시 하며 동료를 계속 뽑을 수 있다. 명단 상한(§7.1)이
+   * 있어도 자원과 세력은 그대로 새 나간다.
+   *
+   * 결이 모자라 빈손으로 돌아온 것은 여기 들어오지 않는다 — 다시 갈 수 있다.
+   */
+  clearedEpisodes: string[];
 }
 
 export interface Counters {
@@ -157,7 +167,7 @@ export interface Counters {
 }
 
 export interface GameState {
-  schemaVersion: 6;
+  schemaVersion: 7;
   createdAt: number;
 
   hero: HeroState;

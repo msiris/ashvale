@@ -57,6 +57,13 @@ import type { RivalPick } from '@/systems/rivals';
 import { getQuest, REPEAT_PREFIX } from '@/data/quests';
 import type { RegionEvent } from '@/data/content/region-events';
 import { applyRegionChoice, fillEventText, pickRegionEvent } from '@/systems/regionEvents';
+import {
+  applyEpisodeChoice,
+  archetypeFor,
+  episodeById,
+  favorPassed,
+  fillEpisodeText,
+} from '@/systems/episodes';
 import { outingOf } from '@/systems/outing';
 import {
   GAME_INVITE,
@@ -265,6 +272,28 @@ interface GameStore {
   chooseRegionEvent: (index: number) => void;
   closeRegionEvent: () => void;
 
+  /**
+   * 진행 중인 동화 에피소드 (§11 곁가지).
+   *
+   * 결(favor)은 여기 있고 세이브에는 없다 — 한 번 들어가면 끝까지 가는
+   * 값이라 저장할 것이 아니다. 끝난 표만 `world.clearedEpisodes` 로 간다.
+   */
+  episode: {
+    episodeId: string;
+    beat: number;
+    favor: number;
+    /** 방금 고른 결과. null 이면 아직 고르는 중이다 */
+    last: { result: string; notes: string[]; xp: number; levelUp: LevelUp | null } | null;
+    /** 마지막 장까지 끝났을 때. joined 는 따라온 사람 이름 */
+    ending: { text: string; joined: string | null } | null;
+  } | null;
+  /** 에피소드에 들어간다. 이때 1주가 소모된다 */
+  startEpisode: (episodeId: string) => void;
+  chooseEpisodeBeat: (index: number) => void;
+  /** 결과를 읽고 다음 장으로 */
+  advanceEpisode: () => void;
+  closeEpisode: () => void;
+
   /** 노드를 밟았다 → 판정 */
   stepNode: (nodeId: string) => void;
   closeExplore: () => void;
@@ -381,6 +410,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   shop: false,
   outing: null,
   regionEvent: null,
+  episode: null,
   room: null,
   regionSelect: false,
   explore: null,
@@ -1515,6 +1545,119 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   closeRegionEvent() {
     set({ regionEvent: null });
+  },
+
+  /**
+   * 에피소드에 들어선다.
+   *
+   * 지역에 나가는 것과 같은 값을 치른다 — **1주.** 공짜로 이야기만 얻는
+   * 자리를 두면 지역 탐사를 아무도 안 간다. 다만 지역과 달리 맵으로
+   * 옮겨가지 않는다. 마을에 선 채로 이야기만 흐른다.
+   */
+  startEpisode(episodeId) {
+    const { state } = get();
+    if (state === null) return;
+    const episode = episodeById(episodeId);
+    if (episode === null) return;
+
+    // 쓰러진 뒤 쉬는 동안은 나갈 수 없다 (§11). 여기도 나가는 것이다
+    if (state.world.turn < state.hero.restUntilTurn) return;
+
+    const weekResult = endWeek(state, {}, createRng(seedOf(state) + state.world.turn));
+
+    set({
+      state: weekResult.state,
+      regionSelect: false,
+      episode: { episodeId, beat: 0, favor: 0, last: null, ending: null },
+      rival: weekResult.rival ?? get().rival,
+    });
+    void get().save('turn-end');
+  },
+
+  chooseEpisodeBeat(index) {
+    const open = get().episode;
+    const { state } = get();
+    if (open === null || state === null || open.last !== null || open.ending !== null) return;
+
+    const episode = episodeById(open.episodeId);
+    const beat = episode?.beats[open.beat];
+    const choice = beat?.choices[index];
+    if (episode === undefined || episode === null || choice === undefined) return;
+    play('choose');
+
+    const applied = applyEpisodeChoice(state, choice);
+    const gained = gainXp(applied.state, applied.xp);
+    const line = fillEpisodeText(choice.result, state);
+
+    set({
+      state: {
+        ...gained.state,
+        chronicle: appendEntries(gained.state.chronicle, [
+          makeEntry(gained.state.world.turn, gained.state.chronicle.length, line),
+        ]),
+      },
+      episode: {
+        ...open,
+        favor: open.favor + choice.favor,
+        last: { result: line, notes: applied.notes, xp: applied.xp, levelUp: gained.levelUp },
+      },
+    });
+    void get().save('turn-end');
+  },
+
+  /**
+   * 결과를 읽었다 → 다음 장. 마지막 장이었으면 끝을 낸다.
+   *
+   * 결이 모자라면 **끝낸 표를 남기지 않는다.** 다시 갈 수 있다 —
+   * 한 번 어긋났다고 그 사람을 영영 못 만나면 고르는 자리가 함정이 된다.
+   */
+  advanceEpisode() {
+    const open = get().episode;
+    const { state } = get();
+    if (open === null || state === null || open.last === null) return;
+
+    const episode = episodeById(open.episodeId);
+    if (episode === null) return;
+
+    if (open.beat + 1 < episode.beats.length) {
+      set({ episode: { ...open, beat: open.beat + 1, last: null } });
+      return;
+    }
+
+    const passed = favorPassed(open.favor);
+    let next = state;
+    let joined: string | null = null;
+
+    if (passed) {
+      const grown = addCompanion(next, 'episode', archetypeFor(next, episode));
+      if (grown !== null) {
+        next = grown.state;
+        joined = displayName(grown.companion);
+      } else {
+        // 명단이 찼다 (§7.1 상한 8명). 빈손으로 돌려보내지 않는다
+        next = { ...next, resources: { ...next.resources, gold: next.resources.gold + 60 } };
+        set({ toast: '명단이 찼다 · 금화 +60' });
+      }
+      next = {
+        ...next,
+        world: { ...next.world, clearedEpisodes: [...next.world.clearedEpisodes, episode.id] },
+      };
+    }
+
+    const text = fillEpisodeText(passed ? episode.join : episode.miss, next);
+    next = {
+      ...next,
+      chronicle: appendEntries(next.chronicle, [
+        makeEntry(next.world.turn, next.chronicle.length, text),
+      ]),
+    };
+
+    set({ state: next, episode: { ...open, last: null, ending: { text, joined } } });
+    void get().save('turn-end');
+  },
+
+  closeEpisode() {
+    set({ episode: null });
   },
 
   openOuting(companionId) {

@@ -59,10 +59,26 @@ export interface RosterGrowth {
  * 새 인물을 명단에 올린다. 상한 8명 (§7.1).
  * **이름은 비워 둔다** — 이름은 플레이어가 붙인다.
  */
-export function addCompanion(state: GameState, origin: CompanionOrigin): RosterGrowth | null {
+export function addCompanion(
+  state: GameState,
+  origin: CompanionOrigin,
+  /**
+   * 데려오고 싶은 원형. 이야기가 정해 둔 사람이 있을 때 쓴다 (동화 에피소드).
+   *
+   * **이미 명단에 있는 원형이면 무시한다.** 있는 사람만 또 오면
+   * 못 본 원형은 영영 못 본다 — 빈자리부터 채우는 쪽이 낫다.
+   */
+  prefer?: string,
+): RosterGrowth | null {
   if (rosterFull(state)) return null;
 
-  const archetypeId = nextArchetype(state);
+  const taken = new Set(
+    Object.values(state.companions)
+      .filter((c) => c.departedTurn === null)
+      .map((c) => c.archetypeId),
+  );
+  const archetypeId =
+    prefer !== undefined && prefer !== '' && !taken.has(prefer) ? prefer : nextArchetype(state);
   // id 는 세이브 안에서만 유일하면 된다. 시계를 읽지 않는다
   let n = Object.keys(state.companions).length + 1;
   while (state.companions[`c${n}`] !== undefined) n += 1;

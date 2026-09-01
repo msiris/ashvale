@@ -114,6 +114,8 @@ export function PhaserHost() {
 
         const req = {
           townName,
+          // 주마다 다른 말을 하게 한다 (§15.1)
+          ...(state !== null ? { turn: state.world.turn } : {}),
           ...(companion !== undefined
             ? { characterName: companion.name, tone: toneFor(companion) }
             : {}),

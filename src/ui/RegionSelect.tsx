@@ -13,6 +13,7 @@ import { ESCORT_MIN_AFFINITY } from '@/data/relationships';
 import { displayName } from '@/systems/relationships';
 import { escortOf, escortText } from '@/systems/escort';
 import { askerName, fillRequest, requestsOf } from '@/systems/requests';
+import { nextLocked, openEpisodes } from '@/systems/episodes';
 
 const STAT_LABEL = { might: '힘', agility: '민첩', insight: '통찰', will: '의지' } as const;
 
@@ -92,6 +93,52 @@ function EscortPicker() {
           : `${escortText(escortOf(state))} · 동행 자리가 하나 생긴다`}
       </p>
     </div>
+  );
+}
+
+/**
+ * 동화 에피소드 (§11 곁가지).
+ *
+ * 지역 목록 **위에** 둔다. 아래에 두면 지역을 고르러 온 손이 끝까지
+ * 내려오지 않는다 — 새로 만든 길인데 아무도 못 보면 만들지 않은 것과 같다.
+ * 갈 데가 없으면 목록째 감춘다. 빈 칸을 띄우지 않는다.
+ */
+function EpisodeList({ resting }: { resting: boolean }) {
+  const state = useGameStore((s) => s.state);
+  const start = useGameStore((s) => s.startEpisode);
+  if (state === null) return null;
+
+  const open = openEpisodes(state);
+  if (open.length === 0) {
+    const waiting = nextLocked(state);
+    if (waiting === null) return null;
+    return (
+      <p className="mt-2 rounded border border-stoneDark bg-paperDim px-2 py-1 text-[11px] text-inkSoft">
+        다음 이야기는 {waiting.fromTurn}주차부터 열린다.
+      </p>
+    );
+  }
+
+  return (
+    <>
+      <div className="mt-2 mb-1 text-[11px] font-medium text-gold">이야기</div>
+      <ul className="space-y-1">
+        {open.map((episode) => (
+          <li key={episode.id}>
+            <button
+              type="button"
+              disabled={resting}
+              onClick={() => start(episode.id)}
+              style={{ minHeight: TOUCH_MIN }}
+              className="w-full rounded border border-gold/60 bg-paperDim px-3 py-2 text-left disabled:opacity-50"
+            >
+              <div className="text-[13px] font-medium">{episode.title}</div>
+              <div className="text-[11px] leading-snug text-inkSoft">{episode.lure}</div>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }
 
@@ -199,7 +246,9 @@ export function RegionSelect() {
 
         <EscortPicker />
 
+        <EpisodeList resting={resting} />
 
+        <div className="mt-2 mb-1 text-[11px] font-medium text-inkSoft">지역</div>
         <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto">
           {REGIONS.map((region) => {
             const locked = state.world.eraIndex < region.unlockEra;

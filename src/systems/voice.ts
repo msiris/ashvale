@@ -21,9 +21,20 @@ export function addressOf(archetypeId: string, tier: AffinityTier): string {
   return COMPANION_VOICES[archetypeId]?.address[tier] ?? '';
 }
 
-/** 그 단계의 교류 대사. 덧입힘이 있으면 그쪽을 쓴다 */
+/**
+ * 그 단계의 교류 대사.
+ *
+ * `talk` 이 있으면 원본을 갈아 끼우고, `extra` 는 뒤에 덧붙인다.
+ * 가까운 단계는 갈아 끼우고(여동생 톤), 먼 단계는 원본에 더하기만 한다 —
+ * 낯선 사람의 말투까지 바꾸면 가까워지는 낙차가 사라진다.
+ */
 export function talkLinesOf(archetypeId: string, tier: AffinityTier): string[] {
-  const overlay = SIBLING_VOICE[archetypeId]?.talk?.[tier];
-  if (overlay !== undefined && overlay.length > 0) return overlay;
-  return COMPANION_VOICES[archetypeId]?.talk[tier] ?? [];
+  const overlay = SIBLING_VOICE[archetypeId];
+  const base =
+    overlay?.talk?.[tier] !== undefined && overlay.talk[tier].length > 0
+      ? overlay.talk[tier]
+      : (COMPANION_VOICES[archetypeId]?.talk[tier] ?? []);
+
+  const extra = overlay?.extra?.[tier] ?? [];
+  return extra.length > 0 ? [...base, ...extra] : base;
 }

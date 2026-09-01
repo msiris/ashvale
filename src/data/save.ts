@@ -16,7 +16,7 @@
  * 6 — PatronRecord.lastQuestTurn 추가. 의뢰를 몇 주 뒤에 다시 받을 수 있게
  *     하려면 마지막으로 마친 주차가 필요하다.
  */
-export const SCHEMA_VERSION = 6 as const;
+export const SCHEMA_VERSION = 7 as const;
 
 /** 원장 스키마 판. 세이브와 따로 움직인다 */
 export const LEDGER_VERSION = 1 as const;

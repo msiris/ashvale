@@ -32,6 +32,15 @@ export interface DialogueRequest {
   characterName?: string;
   /** 말투 단계 (§15). 없으면 낯선 사람으로 본다 */
   tone?: AffinityTier;
+  /**
+   * 지금 주차. 대사를 고르는 데 쓴다 (§15.1).
+   *
+   * **이게 없어서 대사가 하나로 굳어 있었다** — `talkLine(..., 0)` 이라
+   * 단계마다 첫 줄만 나왔다. 72줄을 써 두고 18줄만 보이던 셈이다.
+   * 주차가 들어오면 주마다 다른 말을 한다. 같은 주에 두 번 걸면 같은 말이지만
+   * 그건 자연스럽다 — 하루 사이에 할 말이 바뀌지는 않는다.
+   */
+  turn?: number;
 }
 
 /** 콘텐츠의 치환 토큰을 채운다. 뒤따르는 조사는 앞말에 맞춰진다 */
@@ -84,8 +93,15 @@ export function buildCompanionScript(
     address: addressOf(archetypeId, tier),
   };
 
+  /**
+   * 주차와 원형을 섞어 고른다. 원형마다 다른 자리에서 시작해야
+   * 같은 주에 둘에게 말을 걸었을 때 나란히 같은 번째 줄이 나오지 않는다.
+   */
+  let seed = req.turn ?? 0;
+  for (let i = 0; i < archetypeId.length; i++) seed = (seed * 31 + archetypeId.charCodeAt(i)) >>> 0;
+
   const lines: string[] = [];
-  const opener = talkLine(archetypeId, tier, 0);
+  const opener = talkLine(archetypeId, tier, seed);
   if (opener !== null) lines.push(fillTokens(opener, ctx));
 
   // 그냥 말을 건 것뿐이다. 선택지는 다가옴 사건에서만 열린다 (§7.3, §8.4)
