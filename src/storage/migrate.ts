@@ -85,6 +85,17 @@ const MIGRATIONS: Record<number, Migration> = {
     const world = isRecord(raw['world']) ? raw['world'] : {};
     return { ...raw, schemaVersion: 9, world: { ...world, factionHolds: {} } };
   },
+
+  /**
+   * 9 -> 10: episodeRun.duel 추가.
+   *
+   * 마주섬이 주사위 한 번에서 세 판 겨룸으로 바뀌었다. 걷던 중이었으면
+   * 겨룸에는 아직 안 들어선 것이므로 null 로 둔다.
+   */
+  9: (raw) => {
+    const run = isRecord(raw['episodeRun']) ? { ...raw['episodeRun'], duel: null } : null;
+    return { ...raw, schemaVersion: 10, episodeRun: run };
+  },
 };
 
 export type MigrateResult =

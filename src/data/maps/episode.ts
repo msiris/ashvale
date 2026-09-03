@@ -172,6 +172,7 @@ export function buildEpisodeMap(input: EpisodeMapInput): TileMapData {
       x: bx,
       y: by,
       solid: true,
+      sprite: 'figure:foe',
       label: bossName,
     });
     // 출구를 막는다. 마주서기 전에는 못 나간다

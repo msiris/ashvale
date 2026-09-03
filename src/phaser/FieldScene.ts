@@ -519,13 +519,23 @@ export class FieldScene extends Phaser.Scene {
     this.npcLayer?.clear(true, true);
 
     for (const obj of map.objects) {
-      if (obj.type !== 'npc' || obj.sprite === undefined) continue;
-      const texKey = this.textureFor(obj.sprite);
+      if (obj.type !== 'npc') continue;
+
+      /**
+       * **스프라이트가 없어도 세운다.**
+       *
+       * 예전에는 `obj.sprite === undefined` 면 통째로 건너뛰었다. 그래서
+       * 마지막 판에 선 것과 세력 마을 사람들이 하나도 안 보였다 —
+       * 길만 막혀 있고 무엇이 막고 있는지 알 수가 없었다.
+       * `textureFor` 가 그림이 없으면 플레이스홀더를 만들어 준다.
+       */
+      const spriteId = obj.sprite ?? 'figure:folk';
+      const texKey = this.textureFor(spriteId);
       const sprite = this.add.sprite(worldX(obj.x), worldY(obj.y), texKey);
       sprite.setOrigin(0.5, 1);
       sprite.setDepth(worldY(obj.y));
       // 인물은 아래를 보고 서 있는다. 말을 걸면 돌아보는 건 대화가 붙을 때다
-      if (this.ensureAnims(obj.sprite)) sprite.setFrame(frameIndex('down', IDLE_FRAME));
+      if (this.ensureAnims(spriteId)) sprite.setFrame(frameIndex('down', IDLE_FRAME));
       this.npcLayer?.add(sprite);
       this.makeNameTag(sprite, obj.label ?? '');
 

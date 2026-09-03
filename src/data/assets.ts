@@ -96,7 +96,33 @@ const CHARACTERS: AssetEntry[] = CHAR_ROSTER.map((slot, i) => ({
   },
 }));
 
-export const ASSETS: readonly AssetEntry[] = [...CHARACTERS];
+/**
+ * 이야기 안에서만 서는 것들 (§11 곁가지, §7).
+ *
+ * 캐릭터 팩에는 갑옷도 나무뿌리도 없다. **`path` 가 null 이라 플레이스홀더로 선다** —
+ * 그래도 서 있어야 한다. 안 서면 길을 막기만 하는 벽이 되어
+ * 무엇 때문에 못 지나가는지 알 수가 없다.
+ *
+ * 그림이 생기면 여기 `path` 만 채우면 된다. 코드는 손대지 않는다.
+ */
+const FIGURES: AssetEntry[] = [
+  {
+    id: 'figure:foe',
+    kind: 'character',
+    path: null,
+    sheet: CHARACTER_SHEET,
+    placeholder: { label: '마주섬', color: 'blood' },
+  },
+  {
+    id: 'figure:folk',
+    kind: 'character',
+    path: null,
+    sheet: CHARACTER_SHEET,
+    placeholder: { label: '세력민', color: 'stone' },
+  },
+];
+
+export const ASSETS: readonly AssetEntry[] = [...CHARACTERS, ...FIGURES];
 
 const BY_ID = new Map(ASSETS.map((a) => [a.id, a]));
 

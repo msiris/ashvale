@@ -21,12 +21,7 @@ import { REGION_ENTRY } from '@/data/maps/region';
 import { INDOOR_ENTRY, buildingIdFromIndoor, indoorMapId } from '@/data/maps/indoor';
 import { REGION_TEXT } from '@/data/content/region-text';
 import { START_HERO_TILE } from '@/data/start';
-import {
-  resolveExplore,
-  rollExplore,
-  type ExploreOutcome,
-  type ExploreRoll,
-} from '@/systems/explore';
+import { resolveExplore, rollExplore, type ExploreOutcome } from '@/systems/explore';
 import { isBlocked, loadMap } from '@/systems/map';
 import { rescueTile } from '@/systems/movement';
 import { escortOf } from '@/systems/escort';
@@ -69,8 +64,25 @@ import {
   episodeById,
   fillEpisodeText,
   isLastStage,
-  rollBoss,
 } from '@/systems/episodes';
+import {
+  DUEL_EDGE,
+  RETRY_FAVOR,
+  duelSettled,
+  duelWon,
+  judge,
+  startTrack,
+  theirStance,
+  type RoundOutcome,
+} from '@/systems/duel';
+import type { Stance } from '@/data/content/duel-text';
+import {
+  RETRY_TEXT,
+  ROUND_DRAW,
+  ROUND_LOSE,
+  ROUND_WIN,
+  TRACK_TEXT,
+} from '@/data/content/duel-text';
 import { EPISODE_ENTRY, episodeMapId } from '@/data/maps/episode';
 import { FACTION_ENTRY, factionMapId, parseFactionMap } from '@/data/maps/faction';
 import { envoyScript } from '@/systems/factionVillage';
@@ -300,10 +312,10 @@ interface GameStore {
     | {
         kind: 'boss';
         text: string;
+        /** 방금 판의 결과. null 이면 자세를 고르는 중이다 */
+        round: { mine: Stance; theirs: Stance; outcome: RoundOutcome; line: string } | null;
+        /** 겨룸이 끝났을 때 */
         result: {
-          roll: ExploreRoll;
-          favorBonus: number;
-          total: number;
           won: boolean;
           line: string;
           joined: string | null;
@@ -321,8 +333,12 @@ interface GameStore {
   nextEpisodeStage: () => void;
   /** 마지막 판에서 마주선다 */
   faceEpisodeBoss: () => void;
-  /** 판정을 굴린다 */
-  rollEpisodeBoss: () => void;
+  /** 자세를 골라 한 판 겨룬다 */
+  pickStance: (stance: Stance) => void;
+  /** 방금 판을 없던 일로 한다. 결 4 이상에서 한 번 */
+  retryRound: () => void;
+  /** 결과를 읽었다 → 다음 판, 또는 끝 */
+  nextRound: () => void;
   /** 세력 이야기의 끝 — 도울 것인가 복속시킬 것인가 (§7) */
   settleFaction: (mode: 'helped' | 'ruled') => void;
   /** 세력 마을로 간다. 이미 이야기를 끝낸 데만 (§7) */
@@ -1617,7 +1633,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({
       state: {
         ...after,
-        episodeRun: { episodeId, stage: 0, favor: 0, seen: [] },
+        episodeRun: { episodeId, stage: 0, favor: 0, seen: [], duel: null },
         world: {
           ...after.world,
           currentMap: episodeMapId(episodeId, 0),
@@ -1705,13 +1721,34 @@ export const useGameStore = create<GameStore>((set, get) => ({
     void get().save('map-change');
   },
 
+  /**
+   * 마주선다 (§11 곁가지).
+   *
+   * 저울을 세우고 첫 판을 연다. 이미 겨루던 중이면 그 자리에서 이어진다 —
+   * 걷다 새로고침해도 밀린 저울이 그대로 있어야 한다.
+   */
   faceEpisodeBoss() {
     const { state } = get();
     if (state === null || get().episode !== null) return;
     const here = currentStage(state);
     const boss = here?.stage.boss;
-    if (here === null || boss === undefined) return;
-    set({ episode: { kind: 'boss', text: fillEpisodeText(boss.text, state), result: null } });
+    if (here === null || boss === undefined || state.episodeRun === null) return;
+
+    let next = state;
+    if (state.episodeRun.duel === null) {
+      next = {
+        ...state,
+        episodeRun: {
+          ...state.episodeRun,
+          duel: { track: startTrack(state), round: 0, retried: false },
+        },
+      };
+    }
+
+    set({
+      state: next,
+      episode: { kind: 'boss', text: fillEpisodeText(boss.text, next), round: null, result: null },
+    });
   },
 
   /**
@@ -1721,25 +1758,111 @@ export const useGameStore = create<GameStore>((set, get) => ({
    * 넘기면 그 사람이 따라오고 다음 이야기가 열린다.
    * 못 넘기면 마을로 돌아온다 — 끝낸 표를 남기지 않으니 다시 갈 수 있다.
    */
-  rollEpisodeBoss() {
+  /**
+   * 한 판 겨룬다 (§11 곁가지).
+   *
+   * **주사위를 굴리지 않는다.** 상대의 자세는 이미 정해져 있고 기색으로
+   * 미리 보여 줬다. 상성대로 갈린다 — 잘 읽었으면 앞서고 못 읽었으면 밀린다.
+   */
+  pickStance(stance) {
     const open = get().episode;
     const { state } = get();
-    if (open === null || open.kind !== 'boss' || open.result !== null || state === null) return;
+    if (open === null || open.kind !== 'boss') return;
+    if (open.round !== null || open.result !== null || state === null) return;
 
     const here = currentStage(state);
     const boss = here?.stage.boss;
-    if (here === null || boss === undefined) return;
+    const duel = state.episodeRun?.duel;
+    if (here === null || boss === undefined || duel === undefined || duel === null) return;
+    if (state.episodeRun === null) return;
     play('choose');
 
-    const rng = createRng(`${seedOf(state)}:${state.world.turn}:${here.episode.id}:boss`);
-    const result = rollBoss(state, boss, rng);
+    const theirs = theirStance(state, here.episode.id, duel.round);
+    const outcome = judge(stance, theirs);
+    const step = outcome === 'win' ? 1 : outcome === 'lose' ? -1 : 0;
+    const track = Math.max(-DUEL_EDGE, Math.min(DUEL_EDGE, duel.track + step));
 
+    const body =
+      outcome === 'win'
+        ? ROUND_WIN[stance]
+        : outcome === 'lose'
+          ? ROUND_LOSE[theirs]
+          : (ROUND_DRAW[duel.round % ROUND_DRAW.length] ?? ROUND_DRAW[0] ?? '');
+    const line = body + ' ' + (TRACK_TEXT[track] ?? '');
+
+    set({
+      state: {
+        ...state,
+        episodeRun: {
+          ...state.episodeRun,
+          duel: { ...duel, track, round: duel.round + 1 },
+        },
+      },
+      episode: { ...open, round: { mine: stance, theirs, outcome, line } },
+    });
+    void get().save('turn-end');
+  },
+
+  /**
+   * 방금 판을 없던 일로 한다.
+   *
+   * 결을 넉넉히 쌓아 왔으면 한 번 쓸 수 있다. 오는 길에 이야기 자리를
+   * 다 밟은 값이 여기서 나온다 — 굴림에 몇을 더해 주는 것보다
+   * **한 번 다시 고르게 해 주는 쪽**이 손에 잡힌다.
+   */
+  retryRound() {
+    const open = get().episode;
+    const { state } = get();
+    if (open === null || open.kind !== 'boss' || open.round === null || state === null) return;
+
+    const duel = state.episodeRun?.duel;
+    if (state.episodeRun === null || duel === undefined || duel === null) return;
+    if (duel.retried || (state.episodeRun.favor ?? 0) < RETRY_FAVOR) return;
+    play('choose');
+
+    // 저울과 판 번호를 되돌린다. 상대의 자세는 판 번호로 정해지므로 그대로다
+    const back = open.round.outcome === 'win' ? -1 : open.round.outcome === 'lose' ? 1 : 0;
+    set({
+      state: {
+        ...state,
+        episodeRun: {
+          ...state.episodeRun,
+          duel: { track: duel.track + back, round: duel.round - 1, retried: true },
+        },
+      },
+      episode: { ...open, round: null },
+      toast: RETRY_TEXT,
+    });
+    void get().save('turn-end');
+  },
+
+  /**
+   * 결과를 읽었다 → 다음 판. 저울이 갈렸거나 세 판을 다 겨뤘으면 끝을 낸다.
+   *
+   * 팽팽하게 끝나면 넘긴 것으로 본다 — 걸어온 판 넷을 빈손으로
+   * 돌려보내면 다시 갈 마음이 안 생긴다.
+   */
+  nextRound() {
+    const open = get().episode;
+    const { state } = get();
+    if (open === null || open.kind !== 'boss' || open.round === null || state === null) return;
+
+    const here = currentStage(state);
+    const boss = here?.stage.boss;
+    const duel = state.episodeRun?.duel;
+    if (here === null || boss === undefined || duel === undefined || duel === null) return;
+
+    if (!duelSettled(duel.track, duel.round)) {
+      set({ episode: { ...open, round: null } });
+      return;
+    }
+
+    const won = duelWon(duel.track);
     let next = state;
     let joined: string | null = null;
-
     const isFaction = here.episode.factionId !== undefined;
 
-    if (result.won && !isFaction) {
+    if (won && !isFaction) {
       const grown = addCompanion(next, 'episode', archetypeFor(next, here.episode));
       if (grown !== null) {
         next = grown.state;
@@ -1751,7 +1874,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    if (result.won) {
+    if (won) {
       next = {
         ...next,
         world: {
@@ -1765,8 +1888,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     // 세력 이야기는 여기서 끝나지 않는다. 갈래를 고르고 나서 끝난다
-    const closing = result.won ? (isFaction ? '' : here.episode.join) : here.episode.miss;
-    const line = fillEpisodeText((result.won ? boss.win : boss.lose) + '\n\n' + closing, next);
+    const closing = won ? (isFaction ? '' : here.episode.join) : here.episode.miss;
+    const line = fillEpisodeText((won ? boss.win : boss.lose) + '\n\n' + closing, next);
     next = {
       ...next,
       chronicle: appendEntries(next.chronicle, [
@@ -1778,7 +1901,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       state: next,
       episode: {
         ...open,
-        result: { ...result, line, joined, pendingFaction: result.won && isFaction },
+        round: null,
+        result: { won, line, joined, pendingFaction: won && isFaction },
       },
     });
     void get().save('turn-end');

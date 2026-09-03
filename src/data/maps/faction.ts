@@ -109,6 +109,7 @@ export function buildFactionMap(id: FactionId, mode: HoldMode): TileMapData {
       x: ENTRY_X - 2,
       y: 7,
       solid: true,
+      sprite: 'figure:folk',
       shop: true,
       label: mode === 'ruled' ? '징수인' : '거래인',
     },
@@ -119,6 +120,7 @@ export function buildFactionMap(id: FactionId, mode: HoldMode): TileMapData {
       x: ENTRY_X + 2,
       y: 7,
       solid: true,
+      sprite: 'figure:folk',
       label: ENVOY_LABEL[id],
     },
   ];
