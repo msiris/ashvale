@@ -14,6 +14,7 @@ import { displayName } from '@/systems/relationships';
 import { escortOf, escortText } from '@/systems/escort';
 import { askerName, fillRequest, requestsOf } from '@/systems/requests';
 import { nextLocked, openEpisodes } from '@/systems/episodes';
+import { RULE_SHORT, ruleForRegion } from '@/systems/walkRule';
 import { FACTION_LABEL } from '@/data/relationships';
 import { HOLD_LABEL } from '@/data/faction-holds';
 import type { FactionId } from '@/types/game';
@@ -322,6 +323,15 @@ export function RegionSelect() {
                     <div className="text-[11px] tabular-nums text-inkSoft">
                       위험도 {region.risk} · 전리품 {lootText(region.loot)}
                       {region.doubleRelic === true ? ' · 유물 두 배' : ''}
+                    </div>
+                  )}
+                  {/*
+                    그 땅이 어떻게 구는지 (§11 — 걷는 규칙).
+                    **나가기 전에 보여야 한다** — 모르고 밟으면 규칙이 아니라 함정이다.
+                  */}
+                  {!locked && ruleForRegion(region.id) !== null && (
+                    <div className="text-[11px] text-blood">
+                      {RULE_SHORT[ruleForRegion(region.id)!]}
                     </div>
                   )}
                 </button>

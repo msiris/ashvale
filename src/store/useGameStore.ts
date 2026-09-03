@@ -84,15 +84,17 @@ import {
   ROUND_WIN,
   TRACK_TEXT,
 } from '@/data/content/duel-text';
-import { EPISODE_ENTRY, episodeMapId, parseEpisodeMap } from '@/data/maps/episode';
+import { EPISODE_ENTRY, episodeMapId } from '@/data/maps/episode';
 import {
   RULE_TEXT,
   TRAPPED_HP,
   TRAPPED_TEXT,
   extraBlocked,
-  ruleOf,
+  ruleForLook,
+  ruleForRegion,
   trapped,
-} from '@/systems/stageRule';
+  tracksSteps,
+} from '@/systems/walkRule';
 import { FACTION_ENTRY, factionMapId, parseFactionMap } from '@/data/maps/faction';
 import { envoyScript } from '@/systems/factionVillage';
 import { HOLD_LABEL, HOLD_REPUTATION } from '@/data/faction-holds';
@@ -1240,6 +1242,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // 쓰러진 뒤 쉬는 동안은 나갈 수 없다 (§11). UI 만 막아 두지 않는다
     if (state.world.turn < state.hero.restUntilTurn) return;
 
+    const regionRule = ruleForRegion(regionId);
+
     // 1. 1주 소모 (§11). 마을 활동은 시간을 쓰지 않지만 나가는 것은 쓴다
     // 어디로 나가는지 넘긴다 — 부탁을 들어줬는지가 여기서 갈린다 (§7.3)
     const weekResult = endWeek(state, { wentTo: regionId }, createRng(seedOf(state) + state.world.turn));
@@ -1254,12 +1258,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
           currentMap: regionMapId(regionId),
           heroTile: { ...REGION_ENTRY },
           clearedNodes: [],
+          steppedTiles: [],
         },
       },
       regionSelect: false,
           explore: null,
       // 주가 넘어갔으니 거래 한도도 새로 찬다
           rival: weekResult.rival ?? get().rival,
+      /**
+       * 그 땅이 어떻게 구는지 들어서면서 한 번 더 알려 준다 (§11 걷는 규칙).
+       * 목록에도 적어 두었지만, 고르고 나서 잊는다.
+       */
+      ...(regionRule !== null ? { toast: RULE_TEXT[regionRule] } : {}),
     });
     void get().save('map-change');
   },
@@ -2293,9 +2303,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
      * 유리 다리는 두 번 밟은 자리가 깨지고, 걸어 다니는 길은 지나온 자리가
      * 사라진다. 걸음 순서대로 쌓아야 갈라진 틈의 주기도 여기서 센다.
      */
-    const inEpisode = parseEpisodeMap(state.world.currentMap) !== null;
+    const tracked = tracksSteps(state.world.currentMap);
     const from = state.world.heroTile;
-    const trail = inEpisode
+    const trail = tracked
       ? [...state.world.steppedTiles, `${from.x},${from.y}`]
       : state.world.steppedTiles;
 
@@ -2315,18 +2325,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
      * 나갈 데가 없는 채로 방향판만 눌러 보게 두면 게임이 고장 난 것으로 보인다.
      * 끝낸 표는 남기지 않으니 다시 갈 수 있다.
      */
-    if (inEpisode) {
+    if (tracked) {
       const here = currentStage(next);
-      const map =
-        here === null
-          ? null
-          : loadMap({
-              mapId: next.world.currentMap,
-              eraIndex: next.world.eraIndex,
-              buildings: next.town.buildings,
-              sceneDone: next.episodeRun?.seen.includes(here.stage.id) ?? false,
-            });
-      const blocked = extraBlocked(next, here?.stage.look ?? null, map);
+      const map = loadMap({
+        mapId: next.world.currentMap,
+        eraIndex: next.world.eraIndex,
+        buildings: next.town.buildings,
+        escorted: next.escort !== null,
+        visit: next.world.turn,
+        sceneDone: here === null ? false : (next.episodeRun?.seen.includes(here.stage.id) ?? false),
+      });
+      const blocked = extraBlocked(next, map);
       if (trapped(next, map, blocked)) {
         set({
           state: {
@@ -2335,7 +2344,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
           },
           toast: TRAPPED_TEXT,
         });
-        get().leaveEpisode();
+        // 에피소드 판이면 이야기를 접고, 지역이면 마을로 돌아온다
+        if (next.episodeRun !== null) get().leaveEpisode();
+        else get().leaveRegion();
         return;
       }
     }
@@ -2351,7 +2362,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
  * 규칙을 모르고 밟으면 함정이지 규칙이 아니다.
  */
 function stageEnterText(stage: EpisodeStage): string {
-  const rule = ruleOf(stage.look);
+  const rule = ruleForLook(stage.look);
   return rule === null ? stage.enter : stage.enter + '\n\n' + RULE_TEXT[rule];
 }
 

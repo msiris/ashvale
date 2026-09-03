@@ -17,7 +17,7 @@ import { STEP_MS, TILE, TURN_HOLD_MS } from '@/data/layout';
 import { seasonOf } from '@/data/seasons';
 import { isBlocked, loadMap, mapKey, objectAt, type MapContext } from '@/systems/map';
 import { currentStage } from '@/systems/episodes';
-import { extraBlocked, ruleOf } from '@/systems/stageRule';
+import { DARK_RADIUS, extraBlocked, ruleOfMap, type WalkRule } from '@/systems/walkRule';
 import { interactionAt, resolveMove, type HeroTile } from '@/systems/movement';
 import { residentsOf, townFolk } from '@/systems/roster';
 import { displayName } from '@/systems/relationships';
@@ -106,7 +106,7 @@ export class FieldScene extends Phaser.Scene {
    * 판 규칙으로 막힌 칸 (§11 곁가지).
    *
    * 깨진 발판과 사라진 길을 그린다. **상태가 아니다** — 매 갱신마다
-   * `stageRule.extraBlocked` 를 다시 물어 그린다.
+   * `walkRule.extraBlocked` 를 다시 물어 그린다.
    */
   private ruleLayer: Phaser.GameObjects.Graphics | null = null;
   private ruleBlocked: ReadonlySet<string> = new Set<string>();
@@ -308,18 +308,18 @@ export class FieldScene extends Phaser.Scene {
    * 한 번 깨면 다음에 와도 깨진 채가 된다. 상태를 물어 매번 다시 그린다.
    */
   private syncRuleTiles(state: GameState): void {
-    const here = currentStage(state);
-    const look = here?.stage.look ?? null;
-    const rule = look === null ? null : ruleOf(look);
+    const rule = ruleOfMap(state);
 
     if (rule === null || this.map === null) {
       this.ruleBlocked = new Set<string>();
       this.ruleLayer?.clear();
+      this.syncDark(state, null);
       return;
     }
 
-    const blocked = extraBlocked(state, look, this.map);
+    const blocked = extraBlocked(state, this.map);
     this.ruleBlocked = blocked;
+    this.syncDark(state, rule);
 
     if (this.ruleLayer === null) {
       this.ruleLayer = this.add.graphics();
@@ -373,6 +373,31 @@ export class FieldScene extends Phaser.Scene {
         g.strokePath();
       }
     }
+  }
+
+  /**
+   * 어두운 데서는 멀리 있는 표식이 안 보인다 (§11 — dark 규칙).
+   *
+   * 길을 막지 않는다. **보이는 것만 줄인다** — 걷는 이유가 '찾는 것' 이 된다.
+   * 표식을 지우는 게 아니라 투명하게 둔다. 지우면 밟았을 때 되살릴 수가 없다.
+   */
+  private syncDark(state: GameState, rule: WalkRule | null): void {
+    const hidden = rule === 'dark';
+    const at = state.world.heroTile;
+
+    this.markerLayer?.children.each((child) => {
+      const obj = child as Phaser.GameObjects.Image;
+      if (!hidden) {
+        obj.setAlpha(1);
+        return true;
+      }
+      // 세계 좌표에서 타일 좌표로 되돌린다. 기준점이 발밑이라 한 칸을 뺀다
+      const tx = Math.round((obj.x - S / 2) / S);
+      const ty = Math.round((obj.y - S) / S);
+      const far = Math.abs(tx - at.x) + Math.abs(ty - at.y) > DARK_RADIUS;
+      obj.setAlpha(far ? 0 : 1);
+      return true;
+    });
   }
 
   private buildMap(ctx: MapContext, cacheKey: string): void {
