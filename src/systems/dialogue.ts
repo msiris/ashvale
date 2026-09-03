@@ -57,6 +57,13 @@ export function fillTokens(text: string, ctx: DialogueContext): string {
 }
 
 /** 그 원형의 단계별 말투에서 한 줄. 인덱스는 부르는 쪽이 정한다 */
+/** 원형마다 다른 시작점. 같은 주에 둘이 같은 줄을 말하지 않게 흩는다 */
+function hashOf(archetypeId: string): number {
+  let n = 0;
+  for (let i = 0; i < archetypeId.length; i++) n += archetypeId.charCodeAt(i);
+  return n;
+}
+
 function talkLine(archetypeId: string, tier: AffinityTier, index: number): string | null {
   const voice = COMPANION_VOICES[archetypeId];
   if (voice === undefined) return null;
@@ -71,7 +78,8 @@ function talkLine(archetypeId: string, tier: AffinityTier, index: number): strin
  * 0번은 첫 줄로 이미 썼으니 1번 이후에서 고른다. 줄이 하나뿐이면 어쩔 수 없이 0번.
  */
 function replyIndex(archetypeId: string, tier: AffinityTier, choiceIndex: number): number {
-  const count = COMPANION_VOICES[archetypeId]?.talk[tier].length ?? 0;
+  // 덧줄까지 센다. 원본 3줄만 세면 마무리 대사에서 덧줄이 영영 안 나온다
+  const count = talkLinesOf(archetypeId, tier).length;
   if (count <= 1) return 0;
   return 1 + (choiceIndex % (count - 1));
 }
@@ -102,9 +110,13 @@ export function buildCompanionScript(
   /**
    * 주차와 원형을 섞어 고른다. 원형마다 다른 자리에서 시작해야
    * 같은 주에 둘에게 말을 걸었을 때 나란히 같은 번째 줄이 나오지 않는다.
+   *
+   * **주차는 더하기만 한다.** 예전에는 `turn * 31 + ...` 을 32비트로 잘랐는데,
+   * 자르고 나면 주차가 하나 늘어도 나머지가 하나 도는 보장이 없다 —
+   * 실제로 1주차와 2주차에 같은 줄이 나왔다. 시작점만 원형으로 흩고
+   * 주차는 그냥 더해야 주마다 정확히 한 칸씩 돈다.
    */
-  let seed = req.turn ?? 0;
-  for (let i = 0; i < archetypeId.length; i++) seed = (seed * 31 + archetypeId.charCodeAt(i)) >>> 0;
+  const seed = (req.turn ?? 0) + hashOf(archetypeId);
 
   const lines: string[] = [];
 

@@ -9,7 +9,7 @@
  * 마지막 마디에서 끝난다. 고른 것이 다음 마디의 말투를 바꾼다.
  *
  * 문체는 §15.1 을 따른다.
- *   - 구어체. 가까워진 뒤에는 `sibling-voice.ts` 와 같은 결로 — 오빠를 부르는 여동생
+ *   - 구어체 반말. 연심 트랙과 동행은 호감 40 이상에서만 열리므로 반말이 맞다
  *   - **외형 묘사 금지.** 플레이어가 어떤 이미지를 넣을지 모른다
  *   - 토큰: {이름} 인물 이름, {거점} 마을 이름
  *
@@ -54,7 +54,7 @@ export const ROMANCE_SCENES: Scene[] = [
     beats: [
       {
         lines: [
-          '비가 와서 처마 밑에 서 있었어. 오빠 오는 거 보고도 안 불렀지.',
+          '비가 와서 처마 밑에 서 있었어. 오는 거 보고도 안 불렀지.',
           '왜 안 불렀냐면… 부르면 뛰어올 거 아니야. 젖잖아.',
         ],
       },
@@ -73,7 +73,7 @@ export const ROMANCE_SCENES: Scene[] = [
           },
           {
             text: '우산을 건네고 돌아선다.',
-            reply: '…이거 오빠 건데. 오빠는 어쩌라고.',
+            reply: '…이건 원래 네 우산인데. 너는 어쩌라고.',
             affinity: 3,
           },
         ],
@@ -121,7 +121,7 @@ export const ROMANCE_SCENES: Scene[] = [
     romanceOnly: true,
     beats: [
       {
-        lines: ['오빠 이름 불러 봐도 돼? 오빠 말고, 이름.'],
+        lines: ['이름으로 불러 봐도 돼? 직함 말고, 그냥 이름.'],
         choices: [
           {
             text: '"불러."',
@@ -129,8 +129,8 @@ export const ROMANCE_SCENES: Scene[] = [
             affinity: 12,
           },
           {
-            text: '"오빠가 더 좋은데."',
-            reply: '알았어. 그럼 계속 오빠. 대신 딴 사람한텐 안 쓸 거야.',
+            text: '"사람들 앞에서는 말고."',
+            reply: '알았어. 그럼 둘일 때만. 그거면 충분해.',
             affinity: 9,
           },
         ],
@@ -158,7 +158,7 @@ export const FIELD_SCENES: Scene[] = [
     at: 0,
     beats: [
       {
-        lines: ['잠깐 앉자. 오빠 숨소리가 아까부터 이상해.'],
+        lines: ['잠깐 앉자. 아까부터 숨소리가 이상해.'],
         choices: [
           {
             text: '앉는다.',
@@ -181,7 +181,7 @@ export const FIELD_SCENES: Scene[] = [
       {
         lines: [
           '이거 반. 아까 챙겨 뒀어.',
-          '아니야, 오빠 거 뺏은 거 아니고. 내 몫에서 뗀 거야.',
+          '아니야, 네 거 뺏은 거 아니고. 내 몫에서 뗀 거야.',
         ],
         choices: [
           {
@@ -206,7 +206,7 @@ export const FIELD_SCENES: Scene[] = [
         lines: ['해 지겠다. 여기서 밤 되면 길 안 보여.'],
       },
       {
-        lines: ['…오빠 옷자락 좀 잡고 갈게. 놓치면 큰일이니까.'],
+        lines: ['…옷자락 좀 잡고 갈게. 놓치면 큰일이니까.'],
         choices: [
           {
             text: '손을 내민다.',
@@ -215,7 +215,7 @@ export const FIELD_SCENES: Scene[] = [
           },
           {
             text: '"앞장서. 네가 더 잘 봐."',
-            reply: '그건 그래. 따라와, 오빠. 놓치지 말고.',
+            reply: '그건 그래. 따라와. 놓치지 말고.',
             affinity: 8,
           },
         ],
