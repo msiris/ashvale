@@ -14,6 +14,9 @@ import { displayName } from '@/systems/relationships';
 import { escortOf, escortText } from '@/systems/escort';
 import { askerName, fillRequest, requestsOf } from '@/systems/requests';
 import { nextLocked, openEpisodes } from '@/systems/episodes';
+import { FACTION_LABEL } from '@/data/relationships';
+import { HOLD_LABEL } from '@/data/faction-holds';
+import type { FactionId } from '@/types/game';
 
 const STAT_LABEL = { might: '힘', agility: '민첩', insight: '통찰', will: '의지' } as const;
 
@@ -93,6 +96,45 @@ function EscortPicker() {
           : `${escortText(escortOf(state))} · 동행 자리가 하나 생긴다`}
       </p>
     </div>
+  );
+}
+
+/**
+ * 이야기를 끝낸 세력의 마을 (§7).
+ *
+ * **주를 쓰지 않는다.** 지역이 아니라 마을이라 판정도 표식도 없고,
+ * 걸어 들어가 거래하고 대표에게 물어보고 나온다.
+ * 끝낸 데가 없으면 목록째 감춘다.
+ */
+function FactionVillages() {
+  const state = useGameStore((s) => s.state);
+  const go = useGameStore((s) => s.enterFactionVillage);
+  if (state === null) return null;
+
+  const held = Object.entries(state.world.factionHolds) as [FactionId, 'helped' | 'ruled'][];
+  if (held.length === 0) return null;
+
+  return (
+    <>
+      <div className="mt-2 mb-1 text-[11px] font-medium text-inkSoft">세력 마을 · 주를 쓰지 않는다</div>
+      <ul className="space-y-1">
+        {held.map(([id, mode]) => (
+          <li key={id}>
+            <button
+              type="button"
+              onClick={() => go(id)}
+              style={{ minHeight: TOUCH_MIN }}
+              className="w-full rounded border border-stoneDark bg-paperDim px-3 py-2 text-left"
+            >
+              <div className="flex items-baseline justify-between">
+                <span className="text-[13px] font-medium">{FACTION_LABEL[id]}</span>
+                <span className="text-[11px] text-inkSoft">{HOLD_LABEL[mode]}</span>
+              </div>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }
 
@@ -247,6 +289,8 @@ export function RegionSelect() {
         <EscortPicker />
 
         <EpisodeList resting={resting} />
+
+        <FactionVillages />
 
         <div className="mt-2 mb-1 text-[11px] font-medium text-inkSoft">지역</div>
         <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto">

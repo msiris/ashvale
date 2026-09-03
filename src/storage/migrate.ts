@@ -79,6 +79,12 @@ const MIGRATIONS: Record<number, Migration> = {
    * 세이브는 없으므로 null 로 둔다. 끝낸 표(clearedEpisodes)는 그대로 산다.
    */
   7: (raw) => ({ ...raw, schemaVersion: 8, episodeRun: null }),
+
+  /** 8 -> 9: world.factionHolds 추가. 아직 어느 세력과도 사이가 정해지지 않았다 */
+  8: (raw) => {
+    const world = isRecord(raw['world']) ? raw['world'] : {};
+    return { ...raw, schemaVersion: 9, world: { ...world, factionHolds: {} } };
+  },
 };
 
 export type MigrateResult =

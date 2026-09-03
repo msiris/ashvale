@@ -18,7 +18,8 @@ import { buildTownMap, townKey, type TownContext } from '@/data/maps/town';
 import { buildRegionMap } from '@/data/maps/region';
 import { buildIndoorMap, buildingIdFromIndoor } from '@/data/maps/indoor';
 import { buildEpisodeMap, parseEpisodeMap } from '@/data/maps/episode';
-import { EPISODES } from '@/data/content/episodes';
+import { ALL_EPISODES } from '@/data/episodes-index';
+import { buildFactionMap, parseFactionMap } from '@/data/maps/faction';
 import { regionIdFromMap } from '@/data/regions';
 
 /**
@@ -46,6 +47,8 @@ export interface MapContext extends TownContext {
   patronMarks?: Record<string, 'offer' | 'report'>;
   /** 이번 주 밖에 나가 있는 의뢰인 (§7.6). 회관에서 빠지고 마을에 선다 */
   patronAway?: string;
+  /** 세력 마을에서 지금 사이가 어떤가 (§7) */
+  holdMode?: 'helped' | 'ruled';
   /**
    * 이 판의 이야기를 이미 봤는가 (§11 곁가지).
    *
@@ -75,6 +78,8 @@ export function mapKey(ctx: MapContext): string {
   }
   const ep = parseEpisodeMap(ctx.mapId);
   if (ep !== null) return `${ctx.mapId}:${ctx.sceneDone === true ? 'done' : 'open'}`;
+  // 사이가 바뀌면 서 있는 사람의 이름표가 바뀐다
+  if (parseFactionMap(ctx.mapId) !== null) return `${ctx.mapId}:${ctx.holdMode ?? 'helped'}`;
   if (regionIdFromMap(ctx.mapId) !== null) {
     const trip = ctx.visit ?? 0;
     return `${ctx.mapId}:${trip}${ctx.escorted === true ? ':escort' : ''}`;
@@ -91,7 +96,7 @@ export function mapKey(ctx: MapContext): string {
 function episodeInput(mapId: string, sceneDone: boolean) {
   const parsed = parseEpisodeMap(mapId);
   if (parsed === null) return null;
-  const episode = EPISODES.find((e) => e.id === parsed.episodeId);
+  const episode = ALL_EPISODES.find((e) => e.id === parsed.episodeId);
   const stage = episode?.stages[parsed.stage];
   if (episode === undefined || stage === undefined) return null;
   return {
@@ -112,6 +117,7 @@ export function loadMap(ctx: MapContext): TileMapData {
   const regionId = regionIdFromMap(ctx.mapId);
   const indoorOf = buildingIdFromIndoor(ctx.mapId);
   const episode = episodeInput(ctx.mapId, ctx.sceneDone === true);
+  const factionId = parseFactionMap(ctx.mapId);
 
   let map: TileMapData;
   if (ctx.mapId === 'town') {
@@ -120,6 +126,8 @@ export function loadMap(ctx: MapContext): TileMapData {
     map = buildRegionMap(regionId, ctx.escorted === true, ctx.visit ?? 0);
   } else if (episode !== null) {
     map = buildEpisodeMap(episode);
+  } else if (factionId !== null) {
+    map = buildFactionMap(factionId, ctx.holdMode ?? 'helped');
   } else if (indoorOf !== null) {
     map = buildIndoorMap({
       buildingId: indoorOf,

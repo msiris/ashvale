@@ -11,6 +11,7 @@
  */
 
 import { EPISODES } from '../src/data/content/episodes';
+import { ALL_EPISODES } from '../src/data/episodes-index';
 import { archetypeFor, openEpisodes } from '../src/systems/episodes';
 import { buildEpisodeMap, EPISODE_ENTRY, episodeMapId, parseEpisodeMap } from '../src/data/maps/episode';
 import { addCompanion } from '../src/systems/roster';
@@ -20,10 +21,10 @@ import { SCHEMA_VERSION } from '../src/data/save';
 import type { GameState } from '../src/types/game';
 import type { TileMapData } from '../src/types/map';
 
-const ids = new Set(EPISODES.map((e) => e.id));
+const ids = new Set(ALL_EPISODES.map((e) => e.id));
 
 // 1. 짜임새
-for (const e of EPISODES) {
+for (const e of ALL_EPISODES) {
   if (e.needs !== undefined && !ids.has(e.needs)) throw new Error(`${e.id}: needs 가 없는 이야기다`);
   if (e.stages.length !== 5) throw new Error(`${e.id}: 판이 ${e.stages.length}개다. 다섯이어야 한다`);
   if (e.townTalk.length < 2) throw new Error(`${e.id}: 마을 소문이 모자란다`);
@@ -60,7 +61,7 @@ function walkable(map: TileMapData, from: { x: number; y: number }): Set<string>
   return seen;
 }
 
-for (const e of EPISODES) {
+for (const e of ALL_EPISODES) {
   e.stages.forEach((stage, i) => {
     const map = buildEpisodeMap({
       episodeId: e.id,
@@ -97,7 +98,7 @@ for (const e of EPISODES) {
 }
 
 // 3. 난도 — 결을 다 쌓으면 어느 정도인가
-for (const e of EPISODES) {
+for (const e of ALL_EPISODES) {
   const best = e.stages.reduce(
     (n, s) => n + (s.scene === undefined ? 0 : Math.max(...s.scene.choices.map((c) => c.favor))),
     0,
@@ -124,7 +125,11 @@ for (const e of EPISODES) {
 const arcs = new Set(Object.values(state.companions).map((c) => c.archetypeId));
 console.log(`원형 ${arcs.size}종: ${[...arcs].join(' ')}`);
 if (arcs.size !== 6) throw new Error('여섯을 다 끝냈는데 원형이 여섯이 아니다');
-if (openEpisodes(state).length !== 0) throw new Error('끝낸 이야기가 목록에 남아 있다');
+const stillOpen = openEpisodes(state);
+if (stillOpen.some((e) => e.factionId === undefined)) {
+  throw new Error('끝낸 동화 이야기가 목록에 남아 있다');
+}
+console.log(`동화 여섯을 끝낸 뒤 남은 것: 세력 이야기 ${stillOpen.length}편`);
 
 // 5. 오래 진행한 판 — 기사·사냥꾼·마법사만 있는 전설기 세이브
 let old2: GameState = newGame({ now: 3, townName: '전설' });
@@ -148,8 +153,14 @@ if (fresh.world.turn !== 0) throw new Error('시작 turn 이 0 이 아니다 —
 const day1 = openEpisodes(fresh);
 if (day1.length !== 1) throw new Error(`1주차에 열린 이야기가 ${day1.length}개다. 하나여야 한다`);
 console.log(`1주차에 열린 이야기: ${day1[0]?.title}`);
+/**
+ * 사슬 둘이 따로 돈다 — 동화와 세력.
+ * 아무것도 안 끝낸 채로 주차만 흘러도 각 사슬의 머리 하나씩만 열려야 한다.
+ */
 const later = openEpisodes({ ...fresh, world: { ...fresh.world, turn: 99 } });
-if (later.length !== 1) throw new Error('앞 이야기를 안 끝냈는데 뒤가 열렸다');
+const heads = later.map((e) => e.id).sort();
+if (heads.length !== 2) throw new Error(`앞 이야기를 안 끝냈는데 ${heads.length}편이 열렸다: ${heads.join(', ')}`);
+console.log(`사슬 머리 둘: ${heads.join(' · ')}`);
 
 // 7. 마이그레이션
 const old = JSON.parse(JSON.stringify(newGame({ now: 2, townName: '옛판' }))) as Record<string, unknown>;

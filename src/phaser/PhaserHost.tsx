@@ -94,6 +94,12 @@ export function PhaserHost() {
           return;
         }
 
+        // 세력 마을의 대표 (§7). 사이와 조공을 말해 준다
+        if (object.id === 'faction-envoy') {
+          store.talkToEnvoy();
+          return;
+        }
+
         // 길목 — 실내면 밖으로, 지역이면 마을로, 마을이면 지역 선택 (§6, §11)
         if (object.type === 'gateway') {
           if (indoorNow) store.leaveIndoor();

@@ -13,7 +13,8 @@
 
 import type { GameState, ResourceId } from '@/types/game';
 import type { Episode, EpisodeBoss, EpisodeChoice, EpisodeStage } from '@/data/content/episodes';
-import { EPISODES, FAVOR_TO_ROLL } from '@/data/content/episodes';
+import { FAVOR_TO_ROLL } from '@/data/content/episodes';
+import { ALL_EPISODES } from '@/data/episodes-index';
 import type { RegionDef } from '@/data/regions';
 import { FACTION_LABEL } from '@/data/relationships';
 import { shiftFaction } from './factions';
@@ -23,7 +24,7 @@ import { rollExplore, type ExploreRoll } from './explore';
 import type { Rng } from './rng';
 
 export function episodeById(id: string): Episode | null {
-  return EPISODES.find((e) => e.id === id) ?? null;
+  return ALL_EPISODES.find((e) => e.id === id) ?? null;
 }
 
 /**
@@ -48,7 +49,7 @@ function weekNumber(state: GameState): number {
  */
 export function openEpisodes(state: GameState): Episode[] {
   const done = new Set(state.world.clearedEpisodes);
-  return EPISODES.filter((e) => {
+  return ALL_EPISODES.filter((e) => {
     if (done.has(e.id)) return false;
     if (weekNumber(state) < e.fromTurn) return false;
     if (e.needs !== undefined && !done.has(e.needs)) return false;
@@ -59,7 +60,7 @@ export function openEpisodes(state: GameState): Episode[] {
 /** 다음에 열릴 것 하나. 목록이 비었을 때 무엇을 기다리는지 알려준다 */
 export function nextLocked(state: GameState): Episode | null {
   const done = new Set(state.world.clearedEpisodes);
-  return EPISODES.find((e) => !done.has(e.id)) ?? null;
+  return ALL_EPISODES.find((e) => !done.has(e.id)) ?? null;
 }
 
 /** {거점} 을 채운다 */

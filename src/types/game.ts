@@ -141,6 +141,14 @@ export interface WorldState {
    * 결이 모자라 빈손으로 돌아온 것은 여기 들어오지 않는다 — 다시 갈 수 있다.
    */
   clearedEpisodes: string[];
+  /**
+   * 이야기를 끝낸 세력과 그때 고른 갈래 (§7).
+   *
+   * 여기 있으면 그쪽 마을에 갈 수 있고, 몇 주에 한 번 조공이 온다.
+   * **끝낸 표(clearedEpisodes)와 따로 둔다** — 끝낸 것만으로는
+   * 도왔는지 복속시켰는지를 알 수 없다.
+   */
+  factionHolds: Partial<Record<FactionId, 'helped' | 'ruled'>>;
 }
 
 export interface Counters {
@@ -167,7 +175,7 @@ export interface Counters {
 }
 
 export interface GameState {
-  schemaVersion: 8;
+  schemaVersion: 9;
   createdAt: number;
 
   hero: HeroState;

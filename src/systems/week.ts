@@ -29,6 +29,7 @@ import { devotionTotals } from './devotion';
 import { factionEffects } from './factions';
 import { getArchetype } from '@/data/archetypes';
 import { COLLAPSE_TEXT as CHRONICLE_TEXT_COLLAPSE } from '@/data/collapse';
+import { tributeFor } from './tribute';
 
 export interface WeekInput {
   /**
@@ -90,6 +91,22 @@ export function endWeek(state: GameState, input: WeekInput, _rng: Rng): WeekResu
   }
   if (next.resources.food < 0) {
     lines.push(CHRONICLE_TEXT.famine(-next.resources.food));
+  }
+
+  /**
+   * 세력에서 오는 조공 (§7).
+   *
+   * 생산 다음에 얹는다 — 흉년에 조공으로 버티는 그림이 나와야
+   * 세력 이야기를 끝낸 값이 손에 잡힌다.
+   */
+  const tribute = tributeFor(next);
+  if (tribute.lines.length > 0) {
+    const resources = { ...next.resources };
+    for (const [key, amount] of Object.entries(tribute.resources)) {
+      resources[key as keyof typeof resources] += amount;
+    }
+    next = { ...next, resources };
+    lines.push(...tribute.lines);
   }
 
   // ── 3. 회복 (신전 등) ────────────────────────────────

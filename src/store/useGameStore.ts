@@ -72,6 +72,9 @@ import {
   rollBoss,
 } from '@/systems/episodes';
 import { EPISODE_ENTRY, episodeMapId } from '@/data/maps/episode';
+import { FACTION_ENTRY, factionMapId, parseFactionMap } from '@/data/maps/faction';
+import { envoyScript } from '@/systems/factionVillage';
+import { HOLD_LABEL, HOLD_REPUTATION } from '@/data/faction-holds';
 import { outingOf } from '@/systems/outing';
 import {
   GAME_INVITE,
@@ -304,6 +307,8 @@ interface GameStore {
           won: boolean;
           line: string;
           joined: string | null;
+          /** 세력 이야기면 아직 갈래를 고르지 않았다 */
+          pendingFaction: boolean;
         } | null;
       }
     | null;
@@ -318,6 +323,12 @@ interface GameStore {
   faceEpisodeBoss: () => void;
   /** 판정을 굴린다 */
   rollEpisodeBoss: () => void;
+  /** 세력 이야기의 끝 — 도울 것인가 복속시킬 것인가 (§7) */
+  settleFaction: (mode: 'helped' | 'ruled') => void;
+  /** 세력 마을로 간다. 이미 이야기를 끝낸 데만 (§7) */
+  enterFactionVillage: (factionId: FactionId) => void;
+  /** 세력 마을의 대표에게 말을 건다 */
+  talkToEnvoy: () => void;
   /** 창을 닫는다. 마주선 결과였으면 마을로 돌아간다 */
   closeEpisode: () => void;
   /** 도중에 그만두고 마을로 */
@@ -1726,7 +1737,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let next = state;
     let joined: string | null = null;
 
-    if (result.won) {
+    const isFaction = here.episode.factionId !== undefined;
+
+    if (result.won && !isFaction) {
       const grown = addCompanion(next, 'episode', archetypeFor(next, here.episode));
       if (grown !== null) {
         next = grown.state;
@@ -1736,6 +1749,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
         next = { ...next, resources: { ...next.resources, gold: next.resources.gold + 60 } };
         set({ toast: '명단이 찼다 · 금화 +60' });
       }
+    }
+
+    if (result.won) {
       next = {
         ...next,
         world: {
@@ -1748,7 +1764,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       next = { ...next, hero: { ...next.hero, hp } };
     }
 
-    const closing = result.won ? here.episode.join : here.episode.miss;
+    // 세력 이야기는 여기서 끝나지 않는다. 갈래를 고르고 나서 끝난다
+    const closing = result.won ? (isFaction ? '' : here.episode.join) : here.episode.miss;
     const line = fillEpisodeText((result.won ? boss.win : boss.lose) + '\n\n' + closing, next);
     next = {
       ...next,
@@ -1757,8 +1774,91 @@ export const useGameStore = create<GameStore>((set, get) => ({
       ]),
     };
 
-    set({ state: next, episode: { ...open, result: { ...result, line, joined } } });
+    set({
+      state: next,
+      episode: {
+        ...open,
+        result: { ...result, line, joined, pendingFaction: result.won && isFaction },
+      },
+    });
     void get().save('turn-end');
+  },
+
+  /**
+   * 세력 이야기의 끝 (§7).
+   *
+   * **어느 쪽도 정답이 아니다.** 도우면 평판과 거래 값이, 복속시키면
+   * 조공이 온다. 무엇이 모자라냐에 따라 갈린다.
+   */
+  settleFaction(mode) {
+    const open = get().episode;
+    const { state } = get();
+    if (open === null || open.kind !== 'boss' || open.result === null || state === null) return;
+    if (!open.result.pendingFaction) return;
+
+    const here = currentStage(state);
+    const id = here?.episode.factionId;
+    const outcome = here?.episode.outcome;
+    if (here === null || id === undefined || outcome === undefined) return;
+    play('choose');
+
+    let next: GameState = {
+      ...state,
+      factions: shiftFaction(state.factions, id, HOLD_REPUTATION[mode]),
+      world: { ...state.world, factionHolds: { ...state.world.factionHolds, [id]: mode } },
+    };
+
+    const line = fillEpisodeText(mode === 'helped' ? outcome.help : outcome.rule, next);
+    next = {
+      ...next,
+      chronicle: appendEntries(next.chronicle, [
+        makeEntry(next.world.turn, next.chronicle.length, line),
+      ]),
+    };
+
+    set({
+      state: next,
+      episode: {
+        ...open,
+        result: { ...open.result, line, pendingFaction: false },
+      },
+      toast: FACTION_LABEL[id] + ' · ' + HOLD_LABEL[mode],
+    });
+    void get().save('turn-end');
+  },
+
+  /**
+   * 세력 마을로 간다 (§7).
+   *
+   * **주를 쓰지 않는다.** 지역이 아니라 마을이라 판정도 표식도 없고,
+   * 볼 일만 보고 나온다. 주를 쓰게 하면 아무도 안 간다.
+   */
+  enterFactionVillage(factionId) {
+    const { state } = get();
+    if (state === null) return;
+    if (state.world.factionHolds[factionId] === undefined) return;
+    set({
+      state: {
+        ...state,
+        world: {
+          ...state.world,
+          currentMap: factionMapId(factionId),
+          heroTile: { ...FACTION_ENTRY },
+          clearedNodes: [],
+        },
+      },
+      regionSelect: false,
+    });
+    void get().save('map-change');
+  },
+
+  talkToEnvoy() {
+    const { state } = get();
+    if (state === null) return;
+    const id = parseFactionMap(state.world.currentMap);
+    if (id === null) return;
+    const script = envoyScript(state, id);
+    if (script !== null) get().openDialogue(script);
   },
 
   /**

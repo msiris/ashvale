@@ -82,9 +82,26 @@ export interface EpisodeStage {
   boss?: EpisodeBoss;
 }
 
+/** 세력 이야기의 끝 — 도울 것인가 복속시킬 것인가 */
+export interface EpisodeOutcome {
+  helpTitle: string;
+  help: string;
+  ruleTitle: string;
+  rule: string;
+}
+
 export interface Episode {
   id: string;
   title: string;
+  /**
+   * 세력 이야기면 그 세력 (§7).
+   *
+   * 있으면 끝이 다르다 — 사람이 따라오는 대신 그 세력과의 사이가 정해지고,
+   * 그쪽 마을에 갈 수 있게 된다. 문장은 content/faction-episodes.ts 에 있다.
+   */
+  factionId?: FactionId;
+  /** 세력 이야기면 끝에서 갈리는 두 갈래 */
+  outcome?: EpisodeOutcome;
   /** 데려오려는 원형. 이미 있으면 빈 원형이 대신 온다 */
   archetypeId: string;
   /** 이 에피소드를 끝내야 열린다 */

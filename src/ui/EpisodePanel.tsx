@@ -11,6 +11,7 @@
 
 import { useGameStore } from '@/store/useGameStore';
 import { currentStage, fillEpisodeText, isLastStage } from '@/systems/episodes';
+import { HOLD_TRADE_BONUS, TRIBUTE_MULTIPLIER } from '@/data/faction-holds';
 import { TOUCH_MIN } from '@/data/layout';
 
 /** 문단 사이를 띄운다. 서술이 한 덩어리로 붙으면 읽히지 않는다 */
@@ -31,6 +32,7 @@ export function EpisodePanel() {
   const state = useGameStore((s) => s.state);
   const choose = useGameStore((s) => s.chooseEpisodeBeat);
   const roll = useGameStore((s) => s.rollEpisodeBoss);
+  const settle = useGameStore((s) => s.settleFaction);
   const close = useGameStore((s) => s.closeEpisode);
 
   if (open === null || state === null) return null;
@@ -146,14 +148,52 @@ export function EpisodePanel() {
                   {open.result.joined} 합류
                 </p>
               )}
-              <button
-                type="button"
-                onClick={close}
-                style={{ minHeight: TOUCH_MIN }}
-                className="mt-3 w-full rounded border border-stoneDark bg-gold text-[13px] font-medium"
-              >
-                마을로 돌아간다
-              </button>
+
+              {/*
+                세력 이야기는 여기서 한 번 더 갈린다 (§7).
+                어느 쪽도 정답이 아니므로 **무엇을 얻고 무엇을 잃는지 적어 둔다** —
+                안 적으면 둘 다 그냥 버튼이다.
+              */}
+              {open.result.pendingFaction ? (
+                <div className="mt-3 space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => settle('helped')}
+                    style={{ minHeight: TOUCH_MIN }}
+                    className="w-full rounded border border-stoneDark bg-paperDim px-3 py-2 text-left"
+                  >
+                    <div className="text-[13px] font-medium">
+                      {here.episode.outcome?.helpTitle}
+                    </div>
+                    <div className="text-[11px] text-inkSoft">
+                      평판이 크게 오르고 그쪽 마을에서 값을 잘 쳐준다 (+
+                      {Math.round(HOLD_TRADE_BONUS.helped * 100)}%). 조공은 적다
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => settle('ruled')}
+                    style={{ minHeight: TOUCH_MIN }}
+                    className="w-full rounded border border-stoneDark bg-paperDim px-3 py-2 text-left"
+                  >
+                    <div className="text-[13px] font-medium">
+                      {here.episode.outcome?.ruleTitle}
+                    </div>
+                    <div className="text-[11px] text-inkSoft">
+                      조공이 {TRIBUTE_MULTIPLIER.ruled}배로 온다. 평판이 깎이고 거래 값이 나빠진다
+                    </div>
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={close}
+                  style={{ minHeight: TOUCH_MIN }}
+                  className="mt-3 w-full rounded border border-stoneDark bg-gold text-[13px] font-medium"
+                >
+                  마을로 돌아간다
+                </button>
+              )}
             </>
           ))}
       </div>

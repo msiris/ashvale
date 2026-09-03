@@ -18,6 +18,21 @@ import {
 } from '@/data/trade';
 import { AFFINITY, GIFT_COOLDOWN_WEEKS } from '@/data/relationships';
 import { seasonOf } from '@/data/seasons';
+import { HOLD_TRADE_BONUS } from '@/data/faction-holds';
+import { parseFactionMap } from '@/data/maps/faction';
+
+/**
+ * 지금 서 있는 세력 마을이 값에 붙이는 보정 (§7).
+ *
+ * 도운 세력의 마을에서는 잘 쳐주고, 복속시킨 데서는 나쁘게 쳐준다.
+ * 우리 마을 시장에서는 0 이다 — 여기까지 걸어와야 붙는 값이다.
+ */
+function villageBonus(state: GameState): number {
+  const id = parseFactionMap(state.world.currentMap);
+  if (id === null) return 0;
+  const mode = state.world.factionHolds[id];
+  return mode === undefined ? 0 : HOLD_TRADE_BONUS[mode];
+}
 
 export function marketLevel(state: GameState): number {
   return state.town.buildings['market'] ?? 0;
@@ -42,7 +57,7 @@ export function sellValue(state: GameState, resource: ResourceId, amount: number
   const trust = state.patrons['bartek']?.trust ?? 0;
   const patronBonus =
     trust >= 40 ? PATRON_SELL_BONUS.oldFriend : trust >= 20 ? PATRON_SELL_BONUS.client : 0;
-  const bonus = 1 + marketLevel(state) * SELL_BONUS_PER_LEVEL + patronBonus;
+  const bonus = 1 + marketLevel(state) * SELL_BONUS_PER_LEVEL + patronBonus + villageBonus(state);
 
   return Math.floor((amount / rate.sellPer) * bonus);
 }
