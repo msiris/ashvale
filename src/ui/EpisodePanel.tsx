@@ -10,7 +10,7 @@
  */
 
 import { useGameStore } from '@/store/useGameStore';
-import { currentStage, fillEpisodeText, isLastStage } from '@/systems/episodes';
+import { currentStage, fillEpisodeText, isLastStage, isRecall } from '@/systems/episodes';
 import {
   DUEL_EDGE,
   DUEL_ROUNDS,
@@ -67,7 +67,13 @@ export function EpisodePanel() {
     <div className="absolute inset-0 z-30 flex flex-col justify-end bg-ink/80 p-3">
       <div className="max-h-full overflow-y-auto rounded border border-stoneDark bg-paper p-3 text-ink">
         <div className="flex items-baseline justify-between">
-          <h2 className="text-[13px] font-medium text-gold">{here.episode.title}</h2>
+          <h2 className="text-[13px] font-medium text-gold">
+            {here.episode.title}
+            {/* 회상이면 표시한다. 처음 걷는 것과 헷갈리면 안 된다 */}
+            {isRecall(state, here.episode.id) && (
+              <span className="ml-1 text-[11px] font-normal text-inkSoft">회상</span>
+            )}
+          </h2>
           <span className="text-[11px] text-inkSoft">
             {last ? '마지막 판' : `${here.index + 1} / ${total}`}
           </span>

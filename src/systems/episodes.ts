@@ -57,6 +57,31 @@ export function openEpisodes(state: GameState): Episode[] {
   });
 }
 
+/**
+ * 이미 끝낸 이야기 (§11 곁가지 — 회상).
+ *
+ * 한 번 끝내면 목록에서 빠지고 다시 볼 수가 없었다. 판 다섯을 걸어 본
+ * 이야기가 그걸로 끝나면, **끝낸 것이 사라지는 것과 같다.**
+ * 여기 모아 두고 다시 걸을 수 있게 한다.
+ *
+ * 사슬 순서를 그대로 쓴다 — 끝낸 차례가 아니라 이야기 순서로 보여야
+ * 어느 편이었는지 찾을 수 있다. 지난 판에만 있던 죽은 id 는 자동으로 빠진다.
+ */
+export function clearedTales(state: GameState): Episode[] {
+  const done = new Set(state.world.clearedEpisodes);
+  return ALL_EPISODES.filter((e) => done.has(e.id));
+}
+
+/**
+ * 지금 걷는 것이 회상인가.
+ *
+ * 끝낸 표가 이미 있는 이야기를 다시 걷는 중이라는 뜻이다.
+ * **보상은 같다.** 회상이라고 값을 깎으면 다시 갈 이유가 없다.
+ */
+export function isRecall(state: GameState, episodeId: string): boolean {
+  return state.world.clearedEpisodes.includes(episodeId);
+}
+
 /** 다음에 열릴 것 하나. 목록이 비었을 때 무엇을 기다리는지 알려준다 */
 export function nextLocked(state: GameState): Episode | null {
   const done = new Set(state.world.clearedEpisodes);

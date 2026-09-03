@@ -13,7 +13,7 @@ import { ESCORT_MIN_AFFINITY } from '@/data/relationships';
 import { displayName } from '@/systems/relationships';
 import { escortOf, escortText } from '@/systems/escort';
 import { askerName, fillRequest, requestsOf } from '@/systems/requests';
-import { nextLocked, openEpisodes } from '@/systems/episodes';
+import { clearedTales, nextLocked, openEpisodes } from '@/systems/episodes';
 import { RULE_SHORT, ruleForRegion } from '@/systems/walkRule';
 import { FACTION_LABEL } from '@/data/relationships';
 import { HOLD_LABEL } from '@/data/faction-holds';
@@ -185,6 +185,61 @@ function EpisodeList({ resting }: { resting: boolean }) {
   );
 }
 
+/**
+ * 회상 (§11 곁가지).
+ *
+ * 이미 끝낸 이야기를 다시 걷는다. **보상은 같다** — 회상이라고 값을 깎으면
+ * 다시 갈 이유가 없다. 값도 같다: 1주가 지난다.
+ *
+ * 이야기 목록 아래에 접어 둔다. 끝낸 것이 쌓이면 목록이 길어져서,
+ * 지금 갈 수 있는 것보다 지난 것이 먼저 눈에 들어오면 안 된다.
+ */
+function RecallList({ resting }: { resting: boolean }) {
+  const state = useGameStore((s) => s.state);
+  const start = useGameStore((s) => s.startEpisode);
+  const [open, setOpen] = useState(false);
+  if (state === null) return null;
+
+  const done = clearedTales(state);
+  if (done.length === 0) return null;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        style={{ minHeight: TOUCH_MIN }}
+        className="mt-2 w-full rounded border border-stoneDark bg-paperDim px-3 text-left text-[11px] text-inkSoft"
+      >
+        회상 · 끝낸 이야기 {done.length}편 {open ? '접기' : '펼치기'}
+      </button>
+      {open && (
+        <ul className="mt-1 space-y-1">
+          {done.map((episode) => (
+            <li key={episode.id}>
+              <button
+                type="button"
+                disabled={resting}
+                onClick={() => start(episode.id)}
+                style={{ minHeight: TOUCH_MIN }}
+                className="w-full rounded border border-stoneDark bg-paperDim px-3 py-2 text-left disabled:opacity-50"
+              >
+                <div className="flex items-baseline justify-between">
+                  <span className="text-[13px]">{episode.title}</span>
+                  <span className="text-[11px] text-inkSoft">다시 걷는다</span>
+                </div>
+                <div className="text-[11px] leading-snug text-inkSoft">
+                  보상은 같다 · 1주가 지난다
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
+
 export function RegionSelect() {
   const open = useGameStore((s) => s.regionSelect);
   const state = useGameStore((s) => s.state);
@@ -290,6 +345,8 @@ export function RegionSelect() {
         <EscortPicker />
 
         <EpisodeList resting={resting} />
+
+        <RecallList resting={resting} />
 
         <FactionVillages />
 

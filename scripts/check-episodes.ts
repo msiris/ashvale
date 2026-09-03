@@ -12,7 +12,7 @@
 
 import { TALES } from '../src/data/content/tales';
 import { ALL_EPISODES } from '../src/data/episodes-index';
-import { archetypeFor, openEpisodes } from '../src/systems/episodes';
+import { archetypeFor, clearedTales, isRecall, openEpisodes } from '../src/systems/episodes';
 import { buildEpisodeMap, EPISODE_ENTRY, episodeMapId, parseEpisodeMap } from '../src/data/maps/episode';
 import { addCompanion } from '../src/systems/roster';
 import { newGame } from '../src/systems/newGame';
@@ -161,6 +161,53 @@ const later = openEpisodes({ ...fresh, world: { ...fresh.world, turn: 99 } });
 const heads = later.map((e) => e.id).sort();
 if (heads.length !== 2) throw new Error(`앞 이야기를 안 끝냈는데 ${heads.length}편이 열렸다: ${heads.join(', ')}`);
 console.log(`사슬 머리 둘: ${heads.join(' · ')}`);
+
+// 8. 오래 진행한 판 — 지난 판의 죽은 이야기 id 가 남아 있어도 처음부터 열린다
+const legacy: GameState = {
+  ...fresh,
+  world: {
+    ...fresh.world,
+    turn: 140,
+    eraIndex: 5,
+    // 지난 판에만 있던 이야기 id 들. 지금은 없는 이야기다
+    clearedEpisodes: ['glass-bridge', 'lantern-wolf', 'paper-tower', 'bitter-well'],
+  },
+};
+const heads2 = openEpisodes(legacy).map((e) => e.id).sort();
+if (heads2.length !== 2) {
+  throw new Error(`옛 세이브에서 ${heads2.length}편이 열렸다: ${heads2.join(', ')}`);
+}
+if (!heads2.includes(TALES[0]!.id)) {
+  throw new Error('옛 세이브에서 첫 이야기가 안 열린다');
+}
+console.log(`옛 세이브(전설기·죽은 id 4개) → 열린 것: ${heads2.join(' · ')}`);
+
+// 죽은 id 는 회상 목록에도 안 나온다
+if (clearedTales(legacy).length !== 0) {
+  throw new Error('없는 이야기가 회상 목록에 나온다');
+}
+
+// 9. 회상 — 끝낸 것이 목록에 나오고, 다시 걸어도 보상이 같다
+const afterOne: GameState = {
+  ...fresh,
+  world: { ...fresh.world, turn: 140, clearedEpisodes: [TALES[0]!.id] },
+};
+const recallable = clearedTales(afterOne);
+if (recallable.length !== 1 || recallable[0]?.id !== TALES[0]!.id) {
+  throw new Error('끝낸 이야기가 회상 목록에 안 나온다');
+}
+if (!isRecall(afterOne, TALES[0]!.id)) throw new Error('회상인데 회상으로 안 본다');
+if (isRecall(afterOne, TALES[1]!.id)) throw new Error('안 끝낸 것을 회상으로 본다');
+
+// 끝낸 이야기는 갈 목록에서 빠지고, 다음 편이 대신 열린다
+const openAfter = openEpisodes(afterOne).map((e) => e.id);
+if (openAfter.includes(TALES[0]!.id)) throw new Error('끝낸 이야기가 갈 목록에 남아 있다');
+if (!openAfter.includes(TALES[1]!.id)) throw new Error('다음 편이 안 열렸다');
+
+// 회상으로 다시 걸어도 원형이 들어온다 — 보상이 같다
+const grown3 = addCompanion(afterOne, 'episode', archetypeFor(afterOne, TALES[0]!));
+if (grown3 === null) throw new Error('회상으로는 동료가 안 들어온다');
+console.log(`회상 · "${TALES[0]!.title}" 다시 걸으면 ${grown3.companion.archetypeId} 합류`);
 
 // 7. 마이그레이션
 const old = JSON.parse(JSON.stringify(newGame({ now: 2, townName: '옛판' }))) as Record<string, unknown>;

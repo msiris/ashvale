@@ -1967,9 +1967,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (here === null || id === undefined || outcome === undefined) return;
     play('choose');
 
+    /**
+     * 회상으로 다시 왔을 때 **같은 갈래를 또 고르면 평판은 움직이지 않는다.**
+     * 안 그러면 같은 이야기를 반복해 평판을 끝까지 올릴 수 있다.
+     * 갈래를 바꾸는 것은 실제로 사이가 달라지는 일이므로 그때는 움직인다.
+     */
+    const before = state.world.factionHolds[id];
+    const changed = before !== mode;
+
     let next: GameState = {
       ...state,
-      factions: shiftFaction(state.factions, id, HOLD_REPUTATION[mode]),
+      factions: changed ? shiftFaction(state.factions, id, HOLD_REPUTATION[mode]) : state.factions,
       world: { ...state.world, factionHolds: { ...state.world.factionHolds, [id]: mode } },
     };
 
