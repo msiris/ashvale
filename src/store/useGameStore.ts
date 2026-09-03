@@ -86,6 +86,8 @@ import {
 } from '@/data/content/duel-text';
 import { EPISODE_ENTRY, episodeMapId } from '@/data/maps/episode';
 import {
+  RETRY_SPOT_HP,
+  RETRY_SPOT_TEXT,
   RULE_TEXT,
   TRAPPED_HP,
   TRAPPED_TEXT,
@@ -360,6 +362,19 @@ interface GameStore {
   closeEpisode: () => void;
   /** 도중에 그만두고 마을로 */
   leaveEpisode: () => void;
+  /**
+   * 규칙이 길을 다 지웠다 (§11 걷는 규칙).
+   *
+   * 예전에는 곧장 마을로 쫓아냈다. 걸어 들어온 사람을 묻지도 않고
+   * 되돌려 보내는 건 벌이지 결정이 아니다. 이제 고르게 한다.
+   */
+  stuck: boolean;
+  /** 이 자리를 처음부터 다시 걷는다 */
+  retrySpot: () => void;
+  /** 그만두고 마을로 돌아간다 */
+  giveUpSpot: () => void;
+  /** 마주섬을 다시 한다. 겨룸을 새로 세운다 */
+  retryBoss: () => void;
 
   /** 노드를 밟았다 → 판정 */
   stepNode: (nodeId: string) => void;
@@ -478,6 +493,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   outing: null,
   regionEvent: null,
   episode: null,
+  stuck: false,
   room: null,
   regionSelect: false,
   explore: null,
@@ -1900,7 +1916,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
         ...next,
         world: {
           ...next.world,
-          clearedEpisodes: [...next.world.clearedEpisodes, here.episode.id],
+          // 같은 표를 두 번 넣지 않는다. 목록에서 빠지니 두 번 깰 일은 없지만,
+          // 세이브에 같은 줄이 쌓이는 것을 막아 둔다
+          clearedEpisodes: next.world.clearedEpisodes.includes(here.episode.id)
+            ? next.world.clearedEpisodes
+            : [...next.world.clearedEpisodes, here.episode.id],
         },
       };
     } else {
@@ -2013,7 +2033,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
    */
   closeEpisode() {
     const open = get().episode;
-    if (open !== null && open.kind === 'boss' && open.result !== null) {
+    /**
+     * 마주섬을 **넘겼으면** 마을로 돌아간다 — 이야기가 끝났으니 그 판에 볼 게 없다.
+     * 못 넘겼으면 돌려보내지 않는다. 다시 설지 돌아갈지는 화면에서 고른다.
+     */
+    if (open !== null && open.kind === 'boss' && open.result?.won === true) {
       set({ episode: null });
       get().leaveEpisode();
       return;
@@ -2040,6 +2064,63 @@ export const useGameStore = create<GameStore>((set, get) => ({
       episode: null,
     });
     void get().save('map-change');
+  },
+
+  /**
+   * 갇힌 자리를 처음부터 다시 걷는다 (§11 걷는 규칙).
+   *
+   * 입구로 되돌리고 걸음 기록을 비운다. **결과 캔 표식은 그대로 둔다** —
+   * 잘못 들어선 것을 물리는 자리지, 지금까지 한 것을 없애는 자리가 아니다.
+   * 값은 기력 하나다. 공짜면 규칙이 아무것도 막지 못한다.
+   */
+  retrySpot() {
+    const { state } = get();
+    if (state === null) return;
+    const inEpisode = state.episodeRun !== null;
+    set({
+      state: {
+        ...state,
+        hero: { ...state.hero, hp: Math.max(0, state.hero.hp - RETRY_SPOT_HP) },
+        world: {
+          ...state.world,
+          heroTile: inEpisode ? { ...EPISODE_ENTRY } : { ...REGION_ENTRY },
+          steppedTiles: [],
+        },
+      },
+      stuck: false,
+      toast: RETRY_SPOT_TEXT,
+    });
+    void get().save('map-change');
+  },
+
+  giveUpSpot() {
+    const { state } = get();
+    if (state === null) return;
+    set({
+      state: { ...state, hero: { ...state.hero, hp: Math.max(0, state.hero.hp - TRAPPED_HP) } },
+      stuck: false,
+      toast: TRAPPED_TEXT,
+    });
+    if (state.episodeRun !== null) get().leaveEpisode();
+    else get().leaveRegion();
+  },
+
+  /**
+   * 마주섬을 다시 한다 (§11 곁가지).
+   *
+   * 겨룸을 비우고 창을 닫는다. 판에는 그대로 서 있으므로 마주설 것에게
+   * 다시 말을 걸면 새로 시작된다. **기력이 없으면 못 한다** —
+   * 무한히 다시 서면 마주섬이 아무것도 걸지 않는 자리가 된다.
+   */
+  retryBoss() {
+    const { state } = get();
+    if (state === null || state.episodeRun === null) return;
+    if (state.hero.hp <= 0) return;
+    set({
+      state: { ...state, episodeRun: { ...state.episodeRun, duel: null } },
+      episode: null,
+    });
+    void get().save('turn-end');
   },
 
   openOuting(companionId) {
@@ -2337,16 +2418,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       });
       const blocked = extraBlocked(next, map);
       if (trapped(next, map, blocked)) {
-        set({
-          state: {
-            ...next,
-            hero: { ...next.hero, hp: Math.max(0, next.hero.hp - TRAPPED_HP) },
-          },
-          toast: TRAPPED_TEXT,
-        });
-        // 에피소드 판이면 이야기를 접고, 지역이면 마을로 돌아온다
-        if (next.episodeRun !== null) get().leaveEpisode();
-        else get().leaveRegion();
+        // 쫓아내지 않는다. 다시 걸을지 돌아갈지 고르게 한다
+        set({ stuck: true });
         return;
       }
     }

@@ -22,6 +22,7 @@ import {
 } from '../src/systems/walkRule';
 import { isBlocked } from '../src/systems/map';
 import { resolveMove } from '../src/systems/movement';
+import { trapped } from '../src/systems/walkRule';
 import { newGame } from '../src/systems/newGame';
 import { migrate } from '../src/storage/migrate';
 import { SCHEMA_VERSION } from '../src/data/save';
@@ -159,15 +160,17 @@ console.log('  유리 — 한 번은 견디고 두 번째에 깨진다');
 
 // 눈이 발자국을 덮는 거리 (성냥팔이 첫 판)
 const roadMap = buildEpisodeMap({ episodeId: 'matchgirl', stage: 0, look: 'road', hasScene: true });
-const gone = stateAt('road', roadMap.id, start, [behind]);
-if (!extraBlocked(gone, roadMap).has(behind)) {
-  throw new Error('길: 지나온 자리가 안 사라진다');
-}
-// 지금 서 있는 칸은 남아 있어야 한다
-if (extraBlocked(gone, roadMap).has(`${start.x},${start.y}`)) {
-  throw new Error('길: 서 있는 칸이 사라졌다');
-}
-console.log('  길 — 지나온 자리가 사라지고 서 있는 칸은 남는다');
+/**
+ * 지나온 자리는 사라지지만 **직전 한 칸은 남는다.**
+ * 전부 지우면 길에서 한 칸만 벗어나도 되돌아 나올 수가 없어 그 자리에서 갇힌다.
+ */
+const older = `${start.x},${start.y + 2}`;
+const gone = stateAt('road', roadMap.id, start, [older, behind]);
+const goneSet = extraBlocked(gone, roadMap);
+if (!goneSet.has(older)) throw new Error('길: 두 걸음 전 자리가 안 사라진다');
+if (goneSet.has(behind)) throw new Error('길: 직전 한 칸까지 사라졌다 — 물릴 데가 없다');
+if (goneSet.has(`${start.x},${start.y}`)) throw new Error('길: 서 있는 칸이 사라졌다');
+console.log('  길 — 두 걸음 전은 사라지고 직전 한 칸과 서 있는 칸은 남는다');
 
 // 4. 틈이 열닫힌다
 let open = 0;
@@ -310,6 +313,100 @@ if (!extraBlocked(late, marshMap).has('3,3')) {
   throw new Error(`늪: ${SINK_DELAY}걸음이 지나도 안 가라앉는다`);
 }
 console.log(`  늪 — 밟고 ${SINK_DELAY}걸음 뒤에 가라앉는다`);
+
+// 4d. 갇힘 판정이 오판하지 않는가 — 정상 경로로 걸어 통과할 때
+function walkForward(
+  map: TileMapData,
+  from: { x: number; y: number },
+  mk: (at: { x: number; y: number }, trail: string[]) => GameState,
+): { step: number; at: { x: number; y: number } } | null {
+  let at = { ...from };
+  const trail: string[] = [];
+  const been = new Set<string>([`${at.x},${at.y}`]);
+  for (let step = 0; step < 80; step++) {
+    const st = mk(at, trail);
+    const blocked = extraBlocked(st, map);
+    if (trapped(st, map, blocked)) return { step, at };
+
+    let next: { x: number; y: number } | null = null;
+    for (const [dx, dy] of [
+      [0, -1],
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+    ] as const) {
+      const nx = at.x + dx;
+      const ny = at.y + dy;
+      if (nx < 0 || ny < 0 || nx >= map.width || ny >= map.height) continue;
+      if (isBlocked(map, nx, ny)) continue;
+      if (blocked.has(`${nx},${ny}`)) continue;
+      if (been.has(`${nx},${ny}`)) continue;
+      next = { x: nx, y: ny };
+      break;
+    }
+    if (next === null) return null;
+    trail.push(`${at.x},${at.y}`);
+    been.add(`${next.x},${next.y}`);
+    at = next;
+  }
+  return null;
+}
+
+for (const e of ALL_EPISODES) {
+  e.stages.forEach((stage, i) => {
+    const map = buildEpisodeMap({
+      episodeId: e.id,
+      stage: i,
+      look: stage.look,
+      hasScene: stage.scene !== undefined,
+      ...(stage.boss !== undefined ? { bossName: stage.boss.name } : {}),
+    });
+    const hit = walkForward(map, EPISODE_ENTRY, (at, trail) => stateAt(stage.look, map.id, at, trail));
+    if (hit !== null) {
+      throw new Error(
+        `${map.id} (${ruleForLook(stage.look)}): ${hit.step}걸음 만에 갇힘 판정 @${hit.at.x},${hit.at.y}`,
+      );
+    }
+  });
+}
+console.log('  에피소드 판 — 앞으로만 걸을 때 갇힘 판정이 안 난다');
+
+for (const id of REGION_IDS) {
+  for (let visit = 0; visit < 8; visit++) {
+    const map = buildRegionMap(id, false, visit);
+    const hit = walkForward(map, REGION_ENTRY, (at, trail) => ({
+      ...base,
+      world: {
+        ...base.world,
+        currentMap: map.id,
+        turn: visit,
+        heroTile: { x: at.x, y: at.y, dir: 'up' },
+        steppedTiles: trail,
+      },
+      episodeRun: null,
+    }));
+    if (hit !== null) {
+      throw new Error(
+        `${id} 지형${visit} (${ruleForRegion(id)}): ${hit.step}걸음 만에 갇힘 판정 @${hit.at.x},${hit.at.y}`,
+      );
+    }
+  }
+}
+console.log('  지역 — 앞으로만 걸을 때 갇힘 판정이 안 난다');
+
+// 문 위에 서 있으면 갇힌 게 아니다 (오판의 원인이었다)
+const exitMap = buildEpisodeMap({ episodeId: 'red-hood', stage: 0, look: 'road', hasScene: true });
+const door = exitMap.objects.find((o) => o.id === 'episode-next');
+if (door === undefined) throw new Error('출구가 없다');
+const onDoor = stateAt('road', exitMap.id, { x: door.x, y: door.y }, ['9,9', '9,8']);
+const everything = new Set<string>();
+for (let x = 0; x < exitMap.width; x++) {
+  for (let y = 0; y < exitMap.height; y++) everything.add(`${x},${y}`);
+}
+if (trapped(onDoor, exitMap, everything)) {
+  throw new Error('문 위에 서 있는데 갇힘으로 본다 — 나가면 되는 자리다');
+}
+console.log('  문 위에 서 있으면 갇힘이 아니다');
 
 // 5. 마이그레이션
 const old = JSON.parse(JSON.stringify(newGame({ now: 2, townName: '옛판' }))) as Record<string, unknown>;

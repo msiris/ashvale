@@ -51,6 +51,8 @@ export function EpisodePanel() {
   const retry = useGameStore((s) => s.retryRound);
   const next = useGameStore((s) => s.nextRound);
   const settle = useGameStore((s) => s.settleFaction);
+  const retryBoss = useGameStore((s) => s.retryBoss);
+  const leave = useGameStore((s) => s.leaveEpisode);
   const close = useGameStore((s) => s.closeEpisode);
 
   if (open === null || state === null) return null;
@@ -177,7 +179,7 @@ export function EpisodePanel() {
                   </div>
                 </button>
               </div>
-            ) : (
+            ) : open.result.won ? (
               <button
                 type="button"
                 onClick={close}
@@ -186,6 +188,40 @@ export function EpisodePanel() {
               >
                 마을로 돌아간다
               </button>
+            ) : (
+              /*
+                못 넘겼을 때 (§11 곁가지).
+                **돌려보내지 않는다.** 판에는 그대로 서 있으므로 다시 설 수 있다.
+                기력이 없으면 다시 설 수 없다 — 무한히 다시 서면 마주섬이
+                아무것도 걸지 않는 자리가 된다.
+              */
+              <div className="mt-3 space-y-1">
+                <button
+                  type="button"
+                  onClick={retryBoss}
+                  disabled={state.hero.hp <= 0}
+                  style={{ minHeight: TOUCH_MIN }}
+                  className="w-full rounded border border-stoneDark bg-gold px-3 py-2 text-left disabled:opacity-50"
+                >
+                  <div className="text-[13px] font-medium">다시 마주선다</div>
+                  <div className="text-[11px] text-inkSoft">
+                    {state.hero.hp <= 0
+                      ? '기력이 없다. 이번에는 돌아가야 한다'
+                      : `이 판에 그대로 선다 · 기력 ${state.hero.hp}/${state.hero.maxHp}`}
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={leave}
+                  style={{ minHeight: TOUCH_MIN }}
+                  className="w-full rounded border border-stoneDark bg-paperDim px-3 py-2 text-left"
+                >
+                  <div className="text-[13px] font-medium">마을로 돌아간다</div>
+                  <div className="text-[11px] text-inkSoft">
+                    끝낸 표를 남기지 않으니 다음에 다시 올 수 있다
+                  </div>
+                </button>
+              </div>
             )}
           </>
         )}

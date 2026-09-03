@@ -15,6 +15,7 @@ import { RegionSelect } from './RegionSelect';
 import { RoomPanel } from './RoomPanel';
 import { RegionEventPanel } from './RegionEventPanel';
 import { EpisodePanel } from './EpisodePanel';
+import { StuckPanel } from './StuckPanel';
 import { OutingPanel } from './OutingPanel';
 import { ExploreResult } from './ExploreResult';
 import { Toast } from './Toast';
@@ -40,6 +41,7 @@ export function FieldBand({ prompt, talking }: Props) {
       <RoomPanel />
       <RegionEventPanel />
       <EpisodePanel />
+      <StuckPanel />
       <OutingPanel />
       <ExploreResult />
       <Toast />

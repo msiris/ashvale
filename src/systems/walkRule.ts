@@ -141,8 +141,18 @@ export function extraBlocked(state: GameState, map: TileMapData | null): Readonl
   }
 
   if (rule === 'vanish') {
+    /**
+     * **직전 한 칸은 남긴다.**
+     *
+     * 지나온 자리를 전부 지우면 길에서 한 칸만 벗어나도 되돌아 나올 수가 없어,
+     * 막다른 자리에 들어서는 순간 갇힌다. 실제로 자주 갇혔다.
+     * 한 칸만 남겨 두면 잘못 들어선 것을 한 번은 물릴 수 있다 —
+     * 되짚어 갈 데가 없다는 결은 그대로다.
+     */
     const out = new Set<string>(stepped);
     out.delete(standing);
+    const back = stepped[stepped.length - 1];
+    if (back !== undefined) out.delete(back);
     return out;
   }
 
@@ -184,8 +194,15 @@ export function riftTiles(map: TileMapData): ReadonlySet<string> {
 /**
  * 갇혔는가.
  *
- * 사방이 다 막혔으면 규칙이 길을 다 지운 것이다. 부르는 쪽이 마을로 돌려보낸다 —
- * 나갈 데가 없는 채로 방향판만 눌러 보게 두면 게임이 고장 난 것으로 보인다.
+ * 사방이 다 막혔고 **여기서 할 수 있는 것도 없을 때만** 갇힌 것이다.
+ *
+ * 처음에는 사방만 봤는데, 그러면 **출구 칸에 도착한 것도 갇힘으로 읽혔다** —
+ * 나가는 문은 맵 테두리에 붙어 있어 사방이 테두리와 지나온 자리뿐이다.
+ * 다음 판으로 나가려고 거기까지 걸어간 사람을 붙잡아 마을로 쫓아냈다.
+ *
+ * 그래서 두 가지를 더 본다.
+ *   서 있는 칸에 문·표식이 있으면 A 로 빠져나갈 수 있다
+ *   옆 칸에 말 걸 것이 서 있으면 그것도 할 일이다 (마지막 판에 마주설 것)
  */
 export function trapped(
   state: GameState,
@@ -194,6 +211,11 @@ export function trapped(
 ): boolean {
   if (map === null) return false;
   const { x, y } = state.world.heroTile;
+
+  // 서 있는 칸에서 할 수 있는 것 — 문으로 나가거나 표식을 밟는다
+  const under = map.objects.find((o) => o.x === x && o.y === y);
+  if (under !== undefined && under.type !== 'npc') return false;
+
   for (const [dx, dy] of [
     [0, -1],
     [0, 1],
@@ -202,6 +224,11 @@ export function trapped(
   ] as const) {
     const nx = x + dx;
     const ny = y + dy;
+
+    // 막고 서 있어도 말은 걸 수 있다. 갇힌 게 아니다
+    const there = map.objects.find((o) => o.x === nx && o.y === ny);
+    if (there !== undefined && there.type === 'npc') return false;
+
     if (isBlocked(map, nx, ny)) continue;
     if (blocked.has(`${nx},${ny}`)) continue;
     return false;
@@ -209,6 +236,15 @@ export function trapped(
   return true;
 }
 
-/** 갇혀서 돌아올 때 잃는 기력 */
+/** 갇힌 자리를 두고 마을로 돌아올 때 잃는 기력 */
 export const TRAPPED_HP = 3;
 export const TRAPPED_TEXT = '발 디딜 데가 없어졌다. 되짚어 나오는 데 하루가 다 갔다.';
+
+/** 갇힌 자리를 처음부터 다시 걸을 때 잃는 기력. 공짜면 규칙이 아무것도 막지 못한다 */
+export const RETRY_SPOT_HP = 1;
+export const RETRY_SPOT_TEXT = '되짚어 입구까지 나왔다. 처음부터 다시 걷는다.';
+
+/** 갇혔을 때 화면에 뜨는 말 */
+export const STUCK_TITLE = '더 갈 데가 없다';
+export const STUCK_BODY =
+  '밟은 자리가 다 무너져 사방이 막혔다. 여기서 나가려면 되짚어 입구까지 가야 한다.';
