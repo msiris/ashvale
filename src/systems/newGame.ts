@@ -63,6 +63,7 @@ export function newGame(input: NewGameInput): GameState {
       currentMap: START_WORLD.currentMap,
       heroTile: { ...START_HERO_TILE },
       clearedNodes: [],
+      steppedTiles: [],
       clearedEpisodes: [],
       factionHolds: {},
     },

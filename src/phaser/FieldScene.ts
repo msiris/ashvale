@@ -17,6 +17,7 @@ import { STEP_MS, TILE, TURN_HOLD_MS } from '@/data/layout';
 import { seasonOf } from '@/data/seasons';
 import { isBlocked, loadMap, mapKey, objectAt, type MapContext } from '@/systems/map';
 import { currentStage } from '@/systems/episodes';
+import { extraBlocked, ruleOf } from '@/systems/stageRule';
 import { interactionAt, resolveMove, type HeroTile } from '@/systems/movement';
 import { residentsOf, townFolk } from '@/systems/roster';
 import { displayName } from '@/systems/relationships';
@@ -101,6 +102,14 @@ export class FieldScene extends Phaser.Scene {
   private hero: HeroTile = { x: 0, y: 0, dir: 'down' };
   private heroSprite: Phaser.GameObjects.Sprite | null = null;
   private npcLayer: Phaser.GameObjects.Group | null = null;
+  /**
+   * 판 규칙으로 막힌 칸 (§11 곁가지).
+   *
+   * 깨진 발판과 사라진 길을 그린다. **상태가 아니다** — 매 갱신마다
+   * `stageRule.extraBlocked` 를 다시 물어 그린다.
+   */
+  private ruleLayer: Phaser.GameObjects.Graphics | null = null;
+  private ruleBlocked: ReadonlySet<string> = new Set<string>();
   /** 지역에서 뒤를 따라오는 동행자 (§11) */
   private escortSprite: Phaser.GameObjects.Sprite | null = null;
   private escortSpriteId = '';
@@ -287,6 +296,83 @@ export class FieldScene extends Phaser.Scene {
 
     // 주인공 자리가 정해진 뒤에 세운다 — 뒤쪽 칸을 알아야 하기 때문이다
     this.syncEscort(state);
+
+    // 판 규칙으로 막힌 칸 (§11 곁가지). 맵을 고치지 않고 위에 덧그린다
+    this.syncRuleTiles(state);
+  }
+
+  /**
+   * 깨진 발판과 사라진 길, 벌어진 틈을 그린다 (§11 곁가지).
+   *
+   * **맵의 collision 을 건드리지 않는다.** 맵은 캐시되어 여러 판이 나눠 쓰므로,
+   * 한 번 깨면 다음에 와도 깨진 채가 된다. 상태를 물어 매번 다시 그린다.
+   */
+  private syncRuleTiles(state: GameState): void {
+    const here = currentStage(state);
+    const look = here?.stage.look ?? null;
+    const rule = look === null ? null : ruleOf(look);
+
+    if (rule === null || this.map === null) {
+      this.ruleBlocked = new Set<string>();
+      this.ruleLayer?.clear();
+      return;
+    }
+
+    const blocked = extraBlocked(state, look, this.map);
+    this.ruleBlocked = blocked;
+
+    if (this.ruleLayer === null) {
+      this.ruleLayer = this.add.graphics();
+      // 지형 위, 인물 아래
+      this.ruleLayer.setDepth(1);
+    }
+    const g = this.ruleLayer;
+    g.clear();
+
+    const fill = Phaser.Display.Color.HexStringToColor(PALETTE.ink).color;
+    const edge = Phaser.Display.Color.HexStringToColor(PALETTE.blood).color;
+
+    for (const key of blocked) {
+      const parts = key.split(',');
+      const x = Number(parts[0]);
+      const y = Number(parts[1]);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      const px = x * S;
+      const py = y * S;
+
+      // 발 디딜 데가 없다는 뜻이다. 어둡게 덮고 테두리를 붉게 둔다
+      g.fillStyle(fill, rule === 'rift' ? 0.85 : 0.65);
+      g.fillRect(px, py, S, S);
+      g.lineStyle(1, edge, 0.7);
+      g.strokeRect(px + 0.5, py + 0.5, S - 1, S - 1);
+    }
+
+    /**
+     * 아직 한 번만 밟은 칸도 표시한다 (유리 다리).
+     * 두 번 밟으면 깨진다는 규칙은 **밟기 전에 보여야** 규칙이다.
+     */
+    if (rule === 'crack') {
+      const once = new Set<string>();
+      const seen = new Set<string>();
+      for (const key of state.world.steppedTiles) {
+        if (seen.has(key)) once.delete(key);
+        else {
+          seen.add(key);
+          once.add(key);
+        }
+      }
+      g.lineStyle(1, edge, 0.35);
+      for (const key of once) {
+        const parts = key.split(',');
+        const x = Number(parts[0]);
+        const y = Number(parts[1]);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+        g.beginPath();
+        g.moveTo(x * S + 3, y * S + S - 3);
+        g.lineTo(x * S + S - 3, y * S + 3);
+        g.strokePath();
+      }
+    }
   }
 
   private buildMap(ctx: MapContext, cacheKey: string): void {
@@ -886,7 +972,11 @@ export class FieldScene extends Phaser.Scene {
     const map = this.map;
     if (map === null) return;
 
-    const outcome = resolveMove(this.hero, map, dir, { fromStandstill });
+    // 판 규칙으로 막힌 칸도 벽으로 본다 (§11 곁가지)
+    const outcome = resolveMove(this.hero, map, dir, {
+      fromStandstill,
+      extraBlocked: this.ruleBlocked,
+    });
 
     switch (outcome.kind) {
       case 'turn':

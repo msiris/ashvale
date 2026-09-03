@@ -76,6 +76,7 @@ import {
   type RoundOutcome,
 } from '@/systems/duel';
 import type { Stance } from '@/data/content/duel-text';
+import type { EpisodeStage } from '@/data/content/episodes';
 import {
   RETRY_TEXT,
   ROUND_DRAW,
@@ -83,7 +84,15 @@ import {
   ROUND_WIN,
   TRACK_TEXT,
 } from '@/data/content/duel-text';
-import { EPISODE_ENTRY, episodeMapId } from '@/data/maps/episode';
+import { EPISODE_ENTRY, episodeMapId, parseEpisodeMap } from '@/data/maps/episode';
+import {
+  RULE_TEXT,
+  TRAPPED_HP,
+  TRAPPED_TEXT,
+  extraBlocked,
+  ruleOf,
+  trapped,
+} from '@/systems/stageRule';
 import { FACTION_ENTRY, factionMapId, parseFactionMap } from '@/data/maps/faction';
 import { envoyScript } from '@/systems/factionVillage';
 import { HOLD_LABEL, HOLD_REPUTATION } from '@/data/faction-holds';
@@ -1639,12 +1648,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
           currentMap: episodeMapId(episodeId, 0),
           heroTile: { ...EPISODE_ENTRY },
           clearedNodes: [],
+          steppedTiles: [],
         },
       },
       regionSelect: false,
       episode: {
         kind: 'enter',
-        text: fillEpisodeText(episode.intro + '\n\n' + first.enter, after),
+        text: fillEpisodeText(episode.intro + '\n\n' + stageEnterText(first), after),
       },
       rival: weekResult.rival ?? get().rival,
     });
@@ -1714,9 +1724,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
           currentMap: episodeMapId(here.episode.id, index),
           heroTile: { ...EPISODE_ENTRY },
           clearedNodes: [],
+          steppedTiles: [],
         },
       },
-      episode: { kind: 'enter', text: fillEpisodeText(stage.enter, state) },
+      episode: { kind: 'enter', text: fillEpisodeText(stageEnterText(stage), state) },
     });
     void get().save('map-change');
   },
@@ -2275,15 +2286,74 @@ export const useGameStore = create<GameStore>((set, get) => ({
   stepHero(to, dir) {
     const { state } = get();
     if (state === null) return;
-    set({
-      state: {
-        ...state,
-        world: { ...state.world, heroTile: { x: to.x, y: to.y, dir } },
+
+    /**
+     * 에피소드 판에서는 밟은 칸을 남긴다 (§11 곁가지 — 판 규칙).
+     *
+     * 유리 다리는 두 번 밟은 자리가 깨지고, 걸어 다니는 길은 지나온 자리가
+     * 사라진다. 걸음 순서대로 쌓아야 갈라진 틈의 주기도 여기서 센다.
+     */
+    const inEpisode = parseEpisodeMap(state.world.currentMap) !== null;
+    const from = state.world.heroTile;
+    const trail = inEpisode
+      ? [...state.world.steppedTiles, `${from.x},${from.y}`]
+      : state.world.steppedTiles;
+
+    const next: GameState = {
+      ...state,
+      world: {
+        ...state.world,
+        heroTile: { x: to.x, y: to.y, dir },
+        steppedTiles: trail,
       },
-    });
+    };
+    set({ state: next });
+
+    /**
+     * 규칙이 길을 다 지웠으면 마을로 돌려보낸다.
+     *
+     * 나갈 데가 없는 채로 방향판만 눌러 보게 두면 게임이 고장 난 것으로 보인다.
+     * 끝낸 표는 남기지 않으니 다시 갈 수 있다.
+     */
+    if (inEpisode) {
+      const here = currentStage(next);
+      const map =
+        here === null
+          ? null
+          : loadMap({
+              mapId: next.world.currentMap,
+              eraIndex: next.world.eraIndex,
+              buildings: next.town.buildings,
+              sceneDone: next.episodeRun?.seen.includes(here.stage.id) ?? false,
+            });
+      const blocked = extraBlocked(next, here?.stage.look ?? null, map);
+      if (trapped(next, map, blocked)) {
+        set({
+          state: {
+            ...next,
+            hero: { ...next.hero, hp: Math.max(0, next.hero.hp - TRAPPED_HP) },
+          },
+          toast: TRAPPED_TEXT,
+        });
+        get().leaveEpisode();
+        return;
+      }
+    }
+
     scheduleSettleSave(get);
   },
 }));
+
+/**
+ * 판에 들어설 때 보여 줄 문단.
+ *
+ * 그 판의 서술 뒤에 **걷는 규칙**을 붙인다 (§11 곁가지).
+ * 규칙을 모르고 밟으면 함정이지 규칙이 아니다.
+ */
+function stageEnterText(stage: EpisodeStage): string {
+  const rule = ruleOf(stage.look);
+  return rule === null ? stage.enter : stage.enter + '\n\n' + RULE_TEXT[rule];
+}
 
 /**
  * 어디에 서 있는지는 세이브의 일부다 (§4). 다만 걸음마다 쓰지는 않는다 —

@@ -132,6 +132,17 @@ export interface WorldState {
    */
   clearedNodes: string[];
   /**
+   * 이 판에서 밟은 칸 (§11 곁가지 — 판 규칙).
+   *
+   * 유리 다리는 두 번 밟은 자리가 깨지고, 걸어 다니는 길은 지나온 자리가
+   * 사라진다. **세션에만 두면 새로고침으로 발판이 되살아난다** —
+   * 되짚어 갈 수 없다는 규칙이 규칙이 아니게 된다.
+   *
+   * 걸음 순서대로 쌓는다. 갈라진 틈이 열닫히는 주기도 이 길이로 센다.
+   * 판에 들어서거나 마을로 돌아올 때 비운다.
+   */
+  steppedTiles: string[];
+  /**
    * 끝낸 동화 에피소드 (§11 곁가지).
    *
    * **§4 에 없던 칸이다.** 세션에만 두면 새로고침으로 같은 이야기를
@@ -175,7 +186,7 @@ export interface Counters {
 }
 
 export interface GameState {
-  schemaVersion: 10;
+  schemaVersion: 11;
   createdAt: number;
 
   hero: HeroState;

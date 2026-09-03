@@ -96,6 +96,12 @@ const MIGRATIONS: Record<number, Migration> = {
     const run = isRecord(raw['episodeRun']) ? { ...raw['episodeRun'], duel: null } : null;
     return { ...raw, schemaVersion: 10, episodeRun: run };
   },
+
+  /** 10 -> 11: world.steppedTiles 추가. 판마다 비우는 값이므로 빈 배열로 둔다 */
+  10: (raw) => {
+    const world = isRecord(raw['world']) ? raw['world'] : {};
+    return { ...raw, schemaVersion: 11, world: { ...world, steppedTiles: [] } };
+  },
 };
 
 export type MigrateResult =

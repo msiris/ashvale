@@ -48,7 +48,16 @@ export function resolveMove(
   hero: HeroTile,
   map: TileMapData,
   dir: Dir,
-  opts: { fromStandstill: boolean },
+  opts: {
+    fromStandstill: boolean;
+    /**
+     * 맵의 collision 말고 **추가로** 막힌 칸 (§11 곁가지 — 판 규칙).
+     *
+     * 깨진 발판과 사라진 길이 여기로 온다. 맵을 고치지 않는 이유는
+     * 맵이 캐시되기 때문이다 — 한 번 깨면 다음에 와도 깨진 채가 된다.
+     */
+    extraBlocked?: ReadonlySet<string>;
+  },
 ): MoveOutcome {
   // 벽을 보고 말을 걸어야 할 때가 있다 (§5)
   if (opts.fromStandstill && hero.dir !== dir) {
@@ -59,6 +68,7 @@ export function resolveMove(
   const to = { x: hero.x + d.dx, y: hero.y + d.dy };
 
   if (isBlocked(map, to.x, to.y)) return { kind: 'blocked', dir };
+  if (opts.extraBlocked?.has(`${to.x},${to.y}`) === true) return { kind: 'blocked', dir };
   return { kind: 'step', dir, to };
 }
 
