@@ -17,6 +17,8 @@ import { inBounds, tileIndex } from '@/types/map';
 import { buildTownMap, townKey, type TownContext } from '@/data/maps/town';
 import { buildRegionMap } from '@/data/maps/region';
 import { buildIndoorMap, buildingIdFromIndoor } from '@/data/maps/indoor';
+import { buildEpisodeMap, parseEpisodeMap } from '@/data/maps/episode';
+import { EPISODES } from '@/data/content/episodes';
 import { regionIdFromMap } from '@/data/regions';
 
 /**
@@ -44,6 +46,13 @@ export interface MapContext extends TownContext {
   patronMarks?: Record<string, 'offer' | 'report'>;
   /** 이번 주 밖에 나가 있는 의뢰인 (§7.6). 회관에서 빠지고 마을에 선다 */
   patronAway?: string;
+  /**
+   * 이 판의 이야기를 이미 봤는가 (§11 곁가지).
+   *
+   * 열쇠에 들어가야 한다 — 안 그러면 이야기를 보고 나서도 캐시에 남은
+   * 지도가 그대로 나와 표식이 되살아난다.
+   */
+  sceneDone?: boolean;
 }
 
 const cache = new Map<string, TileMapData>();
@@ -64,11 +73,35 @@ export function mapKey(ctx: MapContext): string {
       .join(',');
     return `${ctx.mapId}:${ctx.eraIndex}:${who}:${guest}:${marks}:${away}`;
   }
+  const ep = parseEpisodeMap(ctx.mapId);
+  if (ep !== null) return `${ctx.mapId}:${ctx.sceneDone === true ? 'done' : 'open'}`;
   if (regionIdFromMap(ctx.mapId) !== null) {
     const trip = ctx.visit ?? 0;
     return `${ctx.mapId}:${trip}${ctx.escorted === true ? ':escort' : ''}`;
   }
   return ctx.mapId;
+}
+
+/**
+ * 에피소드 맵이면 세우는 데 필요한 것들을 모아 준다.
+ *
+ * 판의 지형과 이야기 자리는 `content/episodes.ts` 가 정한다 —
+ * 맵 만드는 쪽이 이야기를 알 필요는 없으므로 여기서 옮겨 담는다.
+ */
+function episodeInput(mapId: string, sceneDone: boolean) {
+  const parsed = parseEpisodeMap(mapId);
+  if (parsed === null) return null;
+  const episode = EPISODES.find((e) => e.id === parsed.episodeId);
+  const stage = episode?.stages[parsed.stage];
+  if (episode === undefined || stage === undefined) return null;
+  return {
+    episodeId: episode.id,
+    stage: parsed.stage,
+    look: stage.look,
+    hasScene: stage.scene !== undefined,
+    sceneDone,
+    ...(stage.boss !== undefined ? { bossName: stage.boss.name } : {}),
+  };
 }
 
 export function loadMap(ctx: MapContext): TileMapData {
@@ -78,12 +111,15 @@ export function loadMap(ctx: MapContext): TileMapData {
 
   const regionId = regionIdFromMap(ctx.mapId);
   const indoorOf = buildingIdFromIndoor(ctx.mapId);
+  const episode = episodeInput(ctx.mapId, ctx.sceneDone === true);
 
   let map: TileMapData;
   if (ctx.mapId === 'town') {
     map = buildTownMap(ctx);
   } else if (regionId !== null) {
     map = buildRegionMap(regionId, ctx.escorted === true, ctx.visit ?? 0);
+  } else if (episode !== null) {
+    map = buildEpisodeMap(episode);
   } else if (indoorOf !== null) {
     map = buildIndoorMap({
       buildingId: indoorOf,

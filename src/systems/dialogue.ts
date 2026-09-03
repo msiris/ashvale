@@ -41,6 +41,12 @@ export interface DialogueRequest {
    * 그건 자연스럽다 — 하루 사이에 할 말이 바뀌지는 않는다.
    */
   turn?: number;
+  /**
+   * 요즘 마을에 도는 소문 한 줄 (§11 곁가지).
+   *
+   * 다녀온 이야기에 대해 사람들이 하는 말이다. 없으면 붙지 않는다.
+   */
+  rumor?: string;
 }
 
 /** 콘텐츠의 치환 토큰을 채운다. 뒤따르는 조사는 앞말에 맞춰진다 */
@@ -101,6 +107,15 @@ export function buildCompanionScript(
   for (let i = 0; i < archetypeId.length; i++) seed = (seed * 31 + archetypeId.charCodeAt(i)) >>> 0;
 
   const lines: string[] = [];
+
+  /**
+   * 다녀온 이야기가 먼저 나온다 (§11 곁가지).
+   *
+   * 다녀온 데가 마을에서 한 번도 언급되지 않으면 다녀오지 않은 것과 같다.
+   * 늘 나오면 교류 대사를 덮으므로 주마다 셋 중 하나꼴로만 붙인다.
+   */
+  if (req.rumor !== undefined && seed % 3 === 0) lines.push(fillTokens(req.rumor, ctx));
+
   const opener = talkLine(archetypeId, tier, seed);
   if (opener !== null) lines.push(fillTokens(opener, ctx));
 

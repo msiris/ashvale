@@ -95,6 +95,7 @@ export function newGame(input: NewGameInput): GameState {
     factions: { ...START_FACTIONS },
 
     escort: null,
+    episodeRun: null,
     pendingApproach: [],
 
     chronicle: [],

@@ -16,6 +16,7 @@ import { CHAR_TINT_SCALE, PALETTE, SEASON_TINT } from '@/data/palette';
 import { STEP_MS, TILE, TURN_HOLD_MS } from '@/data/layout';
 import { seasonOf } from '@/data/seasons';
 import { isBlocked, loadMap, mapKey, objectAt, type MapContext } from '@/systems/map';
+import { currentStage } from '@/systems/episodes';
 import { interactionAt, resolveMove, type HeroTile } from '@/systems/movement';
 import { residentsOf, townFolk } from '@/systems/roster';
 import { displayName } from '@/systems/relationships';
@@ -68,6 +69,11 @@ const BEHIND: Record<Dir, { x: number; y: number }> = {
 /** 타일 좌표를 세계 좌표로. 스프라이트 기준점은 발밑(가운데 아래)이다 */
 const worldX = (tx: number) => tx * S + S / 2;
 const worldY = (ty: number) => ty * S + S;
+
+/** 지금 서 있는 판의 id. 에피소드 밖이면 빈 문자열 */
+function stageIdOf(state: GameState): string {
+  return currentStage(state)?.stage.id ?? '';
+}
 
 export class FieldScene extends Phaser.Scene {
   static readonly KEY = 'field';
@@ -205,6 +211,10 @@ export class FieldScene extends Phaser.Scene {
       escorted: state.escort !== null,
       // 갈 때마다 새 지형. 그 탐사 안에서는 주차가 안 바뀌므로 고정이다 (§11)
       visit: state.world.turn,
+      // 이 판의 이야기를 이미 봤는가 (§11 곁가지). 봤으면 표식이 사라진다
+      sceneDone: state.episodeRun !== null && state.episodeRun.seen.length > 0
+        ? state.episodeRun.seen.includes(stageIdOf(state))
+        : false,
       // 누구에게 볼 일이 있는지 (§7.6). 머리 위 표로 나간다
       patronMarks: Object.fromEntries(
         Object.keys(PATRON_VOICES)

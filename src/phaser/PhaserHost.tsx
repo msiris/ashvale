@@ -11,6 +11,7 @@ import Phaser from 'phaser';
 import { PALETTE } from '@/data/palette';
 import { companionSprite } from '@/data/sprites';
 import { useGameStore } from '@/store/useGameStore';
+import { townRumor } from '@/systems/episodes';
 import type { GameState } from '@/types/game';
 import { buildPatronScript, buildScript, type PatronContext } from '@/systems/dialogue';
 import { toneFor } from '@/systems/relationships';
@@ -81,13 +82,24 @@ export function PhaserHost() {
          * 프롬프트가 거짓말이 된다. 눌러도 같은 판정이 돌게 한다
          */
         if (object.nodeKind !== undefined) {
-          store.stepNode(object.id);
+          // 에피소드 판의 이야기 자리는 판정이 아니라 고르는 자리다 (§11 곁가지)
+          if (object.id === 'episode-scene') store.openEpisodeScene();
+          else store.stepNode(object.id);
+          return;
+        }
+
+        // 마지막 판에 서 있는 것 (§11 곁가지). 지나쳐 갈 수 없다
+        if (object.id === 'episode-boss') {
+          store.faceEpisodeBoss();
           return;
         }
 
         // 길목 — 실내면 밖으로, 지역이면 마을로, 마을이면 지역 선택 (§6, §11)
         if (object.type === 'gateway') {
           if (indoorNow) store.leaveIndoor();
+          // 에피소드 판 (§11 곁가지) — 북쪽이면 다음 판, 남쪽이면 그만두고 마을로
+          else if (object.target === 'episode-next') store.nextEpisodeStage();
+          else if (state !== null && state.episodeRun !== null) store.leaveEpisode();
           else if (object.target === 'town') store.leaveRegion();
           else store.openRegionSelect();
           return;
@@ -112,10 +124,13 @@ export function PhaserHost() {
           return;
         }
 
+        const rumor = state === null ? null : townRumor(state, state.world.turn);
         const req = {
           townName,
           // 주마다 다른 말을 하게 한다 (§15.1)
           ...(state !== null ? { turn: state.world.turn } : {}),
+          // 다녀온 이야기를 마을 사람들이 입에 올린다 (§11 곁가지)
+          ...(rumor !== null ? { rumor } : {}),
           ...(companion !== undefined
             ? { characterName: companion.name, tone: toneFor(companion) }
             : {}),
@@ -147,7 +162,9 @@ export function PhaserHost() {
       },
       onEnterTile: (object) => {
         if (object.nodeKind === undefined) return;
-        useGameStore.getState().stepNode(object.id);
+        // 에피소드 판의 이야기 자리는 밟으면 열린다 (§11 곁가지)
+        if (object.id === 'episode-scene') useGameStore.getState().openEpisodeScene();
+        else useGameStore.getState().stepNode(object.id);
       },
       onApproachArrive: () => useGameStore.getState().approachArrived(),
     });

@@ -21,7 +21,12 @@ import { REGION_ENTRY } from '@/data/maps/region';
 import { INDOOR_ENTRY, buildingIdFromIndoor, indoorMapId } from '@/data/maps/indoor';
 import { REGION_TEXT } from '@/data/content/region-text';
 import { START_HERO_TILE } from '@/data/start';
-import { resolveExplore, rollExplore, type ExploreOutcome } from '@/systems/explore';
+import {
+  resolveExplore,
+  rollExplore,
+  type ExploreOutcome,
+  type ExploreRoll,
+} from '@/systems/explore';
 import { isBlocked, loadMap } from '@/systems/map';
 import { rescueTile } from '@/systems/movement';
 import { escortOf } from '@/systems/escort';
@@ -60,10 +65,13 @@ import { applyRegionChoice, fillEventText, pickRegionEvent } from '@/systems/reg
 import {
   applyEpisodeChoice,
   archetypeFor,
+  currentStage,
   episodeById,
-  favorPassed,
   fillEpisodeText,
+  isLastStage,
+  rollBoss,
 } from '@/systems/episodes';
+import { EPISODE_ENTRY, episodeMapId } from '@/data/maps/episode';
 import { outingOf } from '@/systems/outing';
 import {
   GAME_INVITE,
@@ -273,26 +281,47 @@ interface GameStore {
   closeRegionEvent: () => void;
 
   /**
-   * 진행 중인 동화 에피소드 (§11 곁가지).
+   * 지금 화면에 떠 있는 에피소드 창 (§11 곁가지).
    *
-   * 결(favor)은 여기 있고 세이브에는 없다 — 한 번 들어가면 끝까지 가는
-   * 값이라 저장할 것이 아니다. 끝난 표만 `world.clearedEpisodes` 로 간다.
+   * 걸어 다니는 것은 맵이 하고, 여기는 **판 위에서 열리는 창**만 든다.
+   * 어디까지 갔는지와 쌓인 결은 `state.episodeRun` 에 있다 —
+   * 판을 넘나드는 값이라 세이브에 있어야 한다.
    */
-  episode: {
-    episodeId: string;
-    beat: number;
-    favor: number;
-    /** 방금 고른 결과. null 이면 아직 고르는 중이다 */
-    last: { result: string; notes: string[]; xp: number; levelUp: LevelUp | null } | null;
-    /** 마지막 장까지 끝났을 때. joined 는 따라온 사람 이름 */
-    ending: { text: string; joined: string | null } | null;
-  } | null;
+  episode:
+    | { kind: 'enter'; text: string }
+    | {
+        kind: 'scene';
+        stageId: string;
+        result: { result: string; notes: string[]; xp: number; levelUp: LevelUp | null } | null;
+      }
+    | {
+        kind: 'boss';
+        text: string;
+        result: {
+          roll: ExploreRoll;
+          favorBonus: number;
+          total: number;
+          won: boolean;
+          line: string;
+          joined: string | null;
+        } | null;
+      }
+    | null;
   /** 에피소드에 들어간다. 이때 1주가 소모된다 */
   startEpisode: (episodeId: string) => void;
+  /** 이야기 자리를 밟았다 */
+  openEpisodeScene: () => void;
   chooseEpisodeBeat: (index: number) => void;
-  /** 결과를 읽고 다음 장으로 */
-  advanceEpisode: () => void;
+  /** 다음 판으로 */
+  nextEpisodeStage: () => void;
+  /** 마지막 판에서 마주선다 */
+  faceEpisodeBoss: () => void;
+  /** 판정을 굴린다 */
+  rollEpisodeBoss: () => void;
+  /** 창을 닫는다. 마주선 결과였으면 마을로 돌아간다 */
   closeEpisode: () => void;
+  /** 도중에 그만두고 마을로 */
+  leaveEpisode: () => void;
 
   /** 노드를 밟았다 → 판정 */
   stepNode: (nodeId: string) => void;
@@ -1554,6 +1583,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
    * 자리를 두면 지역 탐사를 아무도 안 간다. 다만 지역과 달리 맵으로
    * 옮겨가지 않는다. 마을에 선 채로 이야기만 흐른다.
    */
+  /**
+   * 에피소드에 들어선다.
+   *
+   * 지역에 나가는 것과 같은 값을 치른다 — **1주.** 그리고 지역과 같이
+   * 맵으로 옮겨 간다. 다른 점은 나가는 문이 마을이 아니라 다음 판이라는 것뿐이다.
+   */
   startEpisode(episodeId) {
     const { state } = get();
     if (state === null) return;
@@ -1564,28 +1599,51 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (state.world.turn < state.hero.restUntilTurn) return;
 
     const weekResult = endWeek(state, {}, createRng(seedOf(state) + state.world.turn));
+    const after = weekResult.state;
+    const first = episode.stages[0];
+    if (first === undefined) return;
 
     set({
-      state: weekResult.state,
+      state: {
+        ...after,
+        episodeRun: { episodeId, stage: 0, favor: 0, seen: [] },
+        world: {
+          ...after.world,
+          currentMap: episodeMapId(episodeId, 0),
+          heroTile: { ...EPISODE_ENTRY },
+          clearedNodes: [],
+        },
+      },
       regionSelect: false,
-      episode: { episodeId, beat: 0, favor: 0, last: null, ending: null },
+      episode: {
+        kind: 'enter',
+        text: fillEpisodeText(episode.intro + '\n\n' + first.enter, after),
+      },
       rival: weekResult.rival ?? get().rival,
     });
-    void get().save('turn-end');
+    void get().save('map-change');
+  },
+
+  openEpisodeScene() {
+    const { state } = get();
+    if (state === null || get().episode !== null) return;
+    const here = currentStage(state);
+    if (here === null || here.stage.scene === undefined) return;
+    if (state.episodeRun?.seen.includes(here.stage.id) === true) return;
+    set({ episode: { kind: 'scene', stageId: here.stage.id, result: null } });
   },
 
   chooseEpisodeBeat(index) {
     const open = get().episode;
     const { state } = get();
-    if (open === null || state === null || open.last !== null || open.ending !== null) return;
+    if (open === null || open.kind !== 'scene' || open.result !== null || state === null) return;
 
-    const episode = episodeById(open.episodeId);
-    const beat = episode?.beats[open.beat];
-    const choice = beat?.choices[index];
-    if (episode === undefined || episode === null || choice === undefined) return;
+    const here = currentStage(state);
+    const choice = here?.stage.scene?.choices[index];
+    if (here === null || choice === undefined) return;
     play('choose');
 
-    const applied = applyEpisodeChoice(state, choice);
+    const applied = applyEpisodeChoice(state, here.stage.id, choice);
     const gained = gainXp(applied.state, applied.xp);
     const line = fillEpisodeText(choice.result, state);
 
@@ -1598,38 +1656,78 @@ export const useGameStore = create<GameStore>((set, get) => ({
       },
       episode: {
         ...open,
-        favor: open.favor + choice.favor,
-        last: { result: line, notes: applied.notes, xp: applied.xp, levelUp: gained.levelUp },
+        result: { result: line, notes: applied.notes, xp: applied.xp, levelUp: gained.levelUp },
       },
     });
     void get().save('turn-end');
   },
 
   /**
-   * 결과를 읽었다 → 다음 장. 마지막 장이었으면 끝을 낸다.
+   * 북쪽 문으로 나갔다 → 다음 판.
    *
-   * 결이 모자라면 **끝낸 표를 남기지 않는다.** 다시 갈 수 있다 —
-   * 한 번 어긋났다고 그 사람을 영영 못 만나면 고르는 자리가 함정이 된다.
+   * 마지막 판 뒤에는 문이 없다. 거기서는 마주서야 나간다.
    */
-  advanceEpisode() {
+  nextEpisodeStage() {
+    const { state } = get();
+    if (state === null) return;
+    const here = currentStage(state);
+    if (here === null || state.episodeRun === null) return;
+    if (isLastStage(here.episode, here.index)) return;
+
+    const index = here.index + 1;
+    const stage = here.episode.stages[index];
+    if (stage === undefined) return;
+
+    set({
+      state: {
+        ...state,
+        episodeRun: { ...state.episodeRun, stage: index },
+        world: {
+          ...state.world,
+          currentMap: episodeMapId(here.episode.id, index),
+          heroTile: { ...EPISODE_ENTRY },
+          clearedNodes: [],
+        },
+      },
+      episode: { kind: 'enter', text: fillEpisodeText(stage.enter, state) },
+    });
+    void get().save('map-change');
+  },
+
+  faceEpisodeBoss() {
+    const { state } = get();
+    if (state === null || get().episode !== null) return;
+    const here = currentStage(state);
+    const boss = here?.stage.boss;
+    if (here === null || boss === undefined) return;
+    set({ episode: { kind: 'boss', text: fillEpisodeText(boss.text, state), result: null } });
+  },
+
+  /**
+   * 마주선 판정 (§11).
+   *
+   * **싸우지 않는다.** 지역과 같은 1d20 에 오는 길에 쌓은 결이 더해진다.
+   * 넘기면 그 사람이 따라오고 다음 이야기가 열린다.
+   * 못 넘기면 마을로 돌아온다 — 끝낸 표를 남기지 않으니 다시 갈 수 있다.
+   */
+  rollEpisodeBoss() {
     const open = get().episode;
     const { state } = get();
-    if (open === null || state === null || open.last === null) return;
+    if (open === null || open.kind !== 'boss' || open.result !== null || state === null) return;
 
-    const episode = episodeById(open.episodeId);
-    if (episode === null) return;
+    const here = currentStage(state);
+    const boss = here?.stage.boss;
+    if (here === null || boss === undefined) return;
+    play('choose');
 
-    if (open.beat + 1 < episode.beats.length) {
-      set({ episode: { ...open, beat: open.beat + 1, last: null } });
-      return;
-    }
+    const rng = createRng(`${seedOf(state)}:${state.world.turn}:${here.episode.id}:boss`);
+    const result = rollBoss(state, boss, rng);
 
-    const passed = favorPassed(open.favor);
     let next = state;
     let joined: string | null = null;
 
-    if (passed) {
-      const grown = addCompanion(next, 'episode', archetypeFor(next, episode));
+    if (result.won) {
+      const grown = addCompanion(next, 'episode', archetypeFor(next, here.episode));
       if (grown !== null) {
         next = grown.state;
         joined = displayName(grown.companion);
@@ -1640,24 +1738,63 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
       next = {
         ...next,
-        world: { ...next.world, clearedEpisodes: [...next.world.clearedEpisodes, episode.id] },
+        world: {
+          ...next.world,
+          clearedEpisodes: [...next.world.clearedEpisodes, here.episode.id],
+        },
       };
+    } else {
+      const hp = Math.max(0, next.hero.hp - boss.risk);
+      next = { ...next, hero: { ...next.hero, hp } };
     }
 
-    const text = fillEpisodeText(passed ? episode.join : episode.miss, next);
+    const closing = result.won ? here.episode.join : here.episode.miss;
+    const line = fillEpisodeText((result.won ? boss.win : boss.lose) + '\n\n' + closing, next);
     next = {
       ...next,
       chronicle: appendEntries(next.chronicle, [
-        makeEntry(next.world.turn, next.chronicle.length, text),
+        makeEntry(next.world.turn, next.chronicle.length, line),
       ]),
     };
 
-    set({ state: next, episode: { ...open, last: null, ending: { text, joined } } });
+    set({ state: next, episode: { ...open, result: { ...result, line, joined } } });
     void get().save('turn-end');
   },
 
+  /**
+   * 창을 닫는다.
+   *
+   * 마주선 결과였으면 이기든 지든 마을로 돌아간다 — 그 판에는 더 볼 게 없다.
+   */
   closeEpisode() {
+    const open = get().episode;
+    if (open !== null && open.kind === 'boss' && open.result !== null) {
+      set({ episode: null });
+      get().leaveEpisode();
+      return;
+    }
     set({ episode: null });
+  },
+
+  leaveEpisode() {
+    const { state } = get();
+    if (state === null) return;
+    set({
+      state: {
+        ...state,
+        episodeRun: null,
+        // 동행은 한 번 나갈 때마다 고른다 (§11). 돌아오면 풀린다
+        escort: null,
+        world: {
+          ...state.world,
+          currentMap: 'town',
+          heroTile: { ...START_HERO_TILE },
+          clearedNodes: [],
+        },
+      },
+      episode: null,
+    });
+    void get().save('map-change');
   },
 
   openOuting(companionId) {

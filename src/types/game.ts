@@ -167,7 +167,7 @@ export interface Counters {
 }
 
 export interface GameState {
-  schemaVersion: 7;
+  schemaVersion: 8;
   createdAt: number;
 
   hero: HeroState;
@@ -182,6 +182,21 @@ export interface GameState {
 
   /** 동행 중인 관계 대상 id (§11 동행) */
   escort: string | null;
+  /**
+   * 지금 걸어 들어가 있는 에피소드 (§11 곁가지).
+   *
+   * **세션에 둘 수 없다.** 판 다섯을 걸어 지나는 동안 새로고침 한 번이면
+   * 어느 판에 있었는지도, 쌓은 결도 사라진다. 지도 밖으로 나오면 비운다.
+   */
+  episodeRun: {
+    episodeId: string;
+    /** 몇 번째 판인가. 0부터 */
+    stage: number;
+    /** 오는 길에 쌓인 결. 마지막 판정에 더해진다 */
+    favor: number;
+    /** 이야기를 본 판들 */
+    seen: string[];
+  } | null;
   /** 말을 걸어오려고 대기 중인 인물 (§7.3 다가옴 구조) */
   pendingApproach: string[];
 

@@ -71,6 +71,14 @@ const MIGRATIONS: Record<number, Migration> = {
     const world = isRecord(raw['world']) ? raw['world'] : {};
     return { ...raw, schemaVersion: 7, world: { ...world, clearedEpisodes: [] } };
   },
+
+  /**
+   * 7 -> 8: episodeRun 추가.
+   *
+   * 에피소드가 글상자에서 걸어 다니는 판으로 바뀌었다. 판 중간에 있던
+   * 세이브는 없으므로 null 로 둔다. 끝낸 표(clearedEpisodes)는 그대로 산다.
+   */
+  7: (raw) => ({ ...raw, schemaVersion: 8, episodeRun: null }),
 };
 
 export type MigrateResult =
