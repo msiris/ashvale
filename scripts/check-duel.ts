@@ -150,9 +150,9 @@ if (dimWins < 20) throw new Error('눈이 어두우면 손쓸 데가 없다');
 // 4. 같은 판에서 자세가 흔들리지 않는다
 const fixed: GameState = { ...base, world: { ...base.world, turn: 7 } };
 for (let round = 0; round < DUEL_ROUNDS; round++) {
-  const a = theirStance(fixed, 'glass-bridge', round);
+  const a = theirStance(fixed, 'red-hood', round);
   for (let again = 0; again < 5; again++) {
-    if (theirStance(fixed, 'glass-bridge', round) !== a) {
+    if (theirStance(fixed, 'red-hood', round) !== a) {
       throw new Error(`${round}판: 볼 때마다 자세가 바뀐다`);
     }
   }
@@ -162,7 +162,7 @@ console.log('  같은 판에서 자세가 고정된다');
 // 5. 마이그레이션
 const old = JSON.parse(JSON.stringify(newGame({ now: 2, townName: '옛판' }))) as Record<string, unknown>;
 old['schemaVersion'] = 9;
-old['episodeRun'] = { episodeId: 'glass-bridge', stage: 2, favor: 4, seen: ['approach'] };
+old['episodeRun'] = { episodeId: 'red-hood', stage: 2, favor: 4, seen: ['errand'] };
 const result = migrate(JSON.stringify(old));
 if (!result.ok) throw new Error(`마이그레이션 실패: ${result.message}`);
 if (result.state.schemaVersion !== SCHEMA_VERSION) throw new Error('판이 안 올라갔다');

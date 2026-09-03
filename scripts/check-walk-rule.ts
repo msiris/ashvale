@@ -137,8 +137,9 @@ for (const e of ALL_EPISODES) {
 console.log('  규칙이 걸린 판마다 입구에서 출구까지 길이 남는다');
 
 // 3. 되짚어 가면 막힌다
+// 물 밑을 걷는 판 (인어공주 2번째 판)
 const glassMap = buildEpisodeMap({
-  episodeId: 'glass-bridge',
+  episodeId: 'mermaid',
   stage: 1,
   look: 'glass',
   hasScene: true,
@@ -156,7 +157,8 @@ if (!extraBlocked(twice, glassMap).has(behind)) {
 }
 console.log('  유리 — 한 번은 견디고 두 번째에 깨진다');
 
-const roadMap = buildEpisodeMap({ episodeId: 'walking-road', stage: 0, look: 'road', hasScene: true });
+// 눈이 발자국을 덮는 거리 (성냥팔이 첫 판)
+const roadMap = buildEpisodeMap({ episodeId: 'matchgirl', stage: 0, look: 'road', hasScene: true });
 const gone = stateAt('road', roadMap.id, start, [behind]);
 if (!extraBlocked(gone, roadMap).has(behind)) {
   throw new Error('길: 지나온 자리가 안 사라진다');
@@ -171,9 +173,10 @@ console.log('  길 — 지나온 자리가 사라지고 서 있는 칸은 남는
 let open = 0;
 for (let n = 0; n < RIFT_PERIOD; n++) if (riftOpen(n)) open += 1;
 if (open !== RIFT_OPEN) throw new Error(`틈이 ${RIFT_PERIOD}걸음 중 ${open}걸음 벌어진다`);
+// 갈라지는 강바닥 (피리 부는 사나이 4번째 판)
 const valleyMap = buildEpisodeMap({
-  episodeId: 'two-letters',
-  stage: 0,
+  episodeId: 'piper',
+  stage: 3,
   look: 'valley',
   hasScene: true,
 });

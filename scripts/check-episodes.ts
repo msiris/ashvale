@@ -10,7 +10,7 @@
  *  7. 7판 세이브가 8판으로 올라오는가
  */
 
-import { EPISODES } from '../src/data/content/episodes';
+import { TALES } from '../src/data/content/tales';
 import { ALL_EPISODES } from '../src/data/episodes-index';
 import { archetypeFor, openEpisodes } from '../src/systems/episodes';
 import { buildEpisodeMap, EPISODE_ENTRY, episodeMapId, parseEpisodeMap } from '../src/data/maps/episode';
@@ -114,7 +114,7 @@ for (const e of ALL_EPISODES) {
 // 4. 여섯을 다 끝내면
 let state: GameState = newGame({ now: 1, townName: '점검' });
 state = { ...state, world: { ...state.world, turn: 99 } };
-for (const e of EPISODES) {
+for (const e of TALES) {
   const grown = addCompanion(state, 'episode', archetypeFor(state, e));
   if (grown === null) throw new Error(`${e.id}: 명단에 못 들어갔다`);
   state = {
@@ -172,5 +172,5 @@ if (result.state.schemaVersion !== SCHEMA_VERSION) throw new Error('판이 안 �
 if (result.state.episodeRun !== null) throw new Error('episodeRun 이 안 생겼다');
 console.log(`7판 → ${SCHEMA_VERSION}판 통과`);
 
-console.log(`맵 id 보기: ${episodeMapId('glass-bridge', 3)}`);
+console.log(`맵 id 보기: ${episodeMapId('red-hood', 3)}`);
 console.log('에피소드 점검 통과');
