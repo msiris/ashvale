@@ -102,6 +102,17 @@ const MIGRATIONS: Record<number, Migration> = {
     const world = isRecord(raw['world']) ? raw['world'] : {};
     return { ...raw, schemaVersion: 11, world: { ...world, steppedTiles: [] } };
   },
+
+  /**
+   * 11 -> 12: 마주섬이 기세 저울에서 체력으로 바뀌었다.
+   *
+   * 겨루던 중이던 세이브는 저울만 들고 있어 옮길 값이 없다. 비운다 —
+   * 판에는 그대로 서 있으므로 다시 마주서면 새로 시작된다.
+   */
+  11: (raw) => {
+    const run = isRecord(raw['episodeRun']) ? { ...raw['episodeRun'], duel: null } : null;
+    return { ...raw, schemaVersion: 12, episodeRun: run };
+  },
 };
 
 export type MigrateResult =

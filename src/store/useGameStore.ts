@@ -66,26 +66,19 @@ import {
   isLastStage,
 } from '@/systems/episodes';
 import {
-  DUEL_EDGE,
   RETRY_FAVOR,
+  blowFor,
   duelSettled,
   duelWon,
   judge,
-  startTrack,
+  startDuel,
   theirStance,
-  upgradeOutcome,
   type RoundOutcome,
   type Timing,
 } from '@/systems/duel';
 import type { Stance } from '@/data/content/duel-text';
 import type { EpisodeStage } from '@/data/content/episodes';
-import {
-  RETRY_TEXT,
-  ROUND_DRAW,
-  ROUND_LOSE,
-  ROUND_WIN,
-  TRACK_TEXT,
-} from '@/data/content/duel-text';
+import { RETRY_TEXT, ROUND_DRAW, ROUND_LOSE, ROUND_WIN } from '@/data/content/duel-text';
 import { EPISODE_ENTRY, episodeMapId } from '@/data/maps/episode';
 import {
   RETRY_SPOT_HP,
@@ -1782,10 +1775,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (state.episodeRun.duel === null) {
       next = {
         ...state,
-        episodeRun: {
-          ...state.episodeRun,
-          duel: { track: startTrack(state), round: 0, retried: false },
-        },
+        episodeRun: { ...state.episodeRun, duel: startDuel(state, boss) },
       };
     }
 
@@ -1822,10 +1812,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
     play('choose');
 
     const theirs = theirStance(state, here.episode.id, duel.round);
-    // 읽은 결과에 손이 한 단계를 얹는다
-    const outcome = upgradeOutcome(judge(stance, theirs), timing);
-    const step = outcome === 'win' ? 1 : outcome === 'lose' ? -1 : 0;
-    const track = Math.max(-DUEL_EDGE, Math.min(DUEL_EDGE, duel.track + step));
+    // 읽기가 방향을 정한다. 손은 아래에서 크기만 바꾼다
+    const outcome = judge(stance, theirs);
+    const blow = blowFor(state, boss, outcome, timing);
+
+    const nextDuel = {
+      ...duel,
+      hp: Math.max(0, duel.hp - blow.toMe),
+      foeHp: Math.max(0, duel.foeHp - blow.toFoe),
+      round: duel.round + 1,
+    };
 
     const body =
       outcome === 'win'
@@ -1833,16 +1829,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
         : outcome === 'lose'
           ? ROUND_LOSE[theirs]
           : (ROUND_DRAW[duel.round % ROUND_DRAW.length] ?? ROUND_DRAW[0] ?? '');
-    const line = body + ' ' + (TRACK_TEXT[track] ?? '');
+    // 얼마나 오갔는지 한 줄로 붙인다. 게이지만 보면 몇이 깎였는지 모른다
+    const tally =
+      blow.toFoe > 0 ? ` ${boss.name} −${blow.toFoe}` : blow.toMe > 0 ? ` 이쪽 −${blow.toMe}` : '';
+    const line = body + tally;
 
     set({
-      state: {
-        ...state,
-        episodeRun: {
-          ...state.episodeRun,
-          duel: { ...duel, track, round: duel.round + 1 },
-        },
-      },
+      state: { ...state, episodeRun: { ...state.episodeRun, duel: nextDuel } },
       episode: { ...open, round: { mine: stance, theirs, outcome, line } },
     });
     void get().save('turn-end');
@@ -1860,19 +1853,29 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { state } = get();
     if (open === null || open.kind !== 'boss' || open.round === null || state === null) return;
 
+    const boss = currentStage(state)?.stage.boss;
     const duel = state.episodeRun?.duel;
-    if (state.episodeRun === null || duel === undefined || duel === null) return;
+    if (state.episodeRun === null || duel == null || boss === undefined) return;
     if (duel.retried || (state.episodeRun.favor ?? 0) < RETRY_FAVOR) return;
     play('choose');
 
-    // 저울과 판 번호를 되돌린다. 상대의 자세는 판 번호로 정해지므로 그대로다
-    const back = open.round.outcome === 'win' ? -1 : open.round.outcome === 'lose' ? 1 : 0;
+    /**
+     * 방금 오간 것을 되돌린다. 상대의 자세는 판 번호로 정해지므로,
+     * 판 번호를 하나 물리면 같은 기색을 다시 보고 다시 고르게 된다.
+     */
+    const back = blowFor(state, boss, open.round.outcome, 'miss');
     set({
       state: {
         ...state,
         episodeRun: {
           ...state.episodeRun,
-          duel: { track: duel.track + back, round: duel.round - 1, retried: true },
+          duel: {
+            ...duel,
+            hp: Math.min(duel.hpMax, duel.hp + back.toMe),
+            foeHp: Math.min(duel.foeHpMax, duel.foeHp + back.toFoe),
+            round: Math.max(0, duel.round - 1),
+            retried: true,
+          },
         },
       },
       episode: { ...open, round: null },
@@ -1897,12 +1900,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const duel = state.episodeRun?.duel;
     if (here === null || boss === undefined || duel === undefined || duel === null) return;
 
-    if (!duelSettled(duel.track, duel.round)) {
+    if (!duelSettled(duel)) {
       set({ episode: { ...open, round: null } });
       return;
     }
 
-    const won = duelWon(duel.track);
+    const won = duelWon(duel);
     let next = state;
     let joined: string | null = null;
     const isFaction = here.episode.factionId !== undefined;

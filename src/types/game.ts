@@ -186,7 +186,7 @@ export interface Counters {
 }
 
 export interface GameState {
-  schemaVersion: 11;
+  schemaVersion: 12;
   createdAt: number;
 
   hero: HeroState;
@@ -222,7 +222,14 @@ export interface GameState {
      * 다시 겨루게 되어, 불리해질 때마다 새로 고치면 된다.
      * 겨룸에 들어서지 않았으면 null 이다.
      */
-    duel: { track: number; round: number; retried: boolean } | null;
+    duel: {
+      hp: number;
+      hpMax: number;
+      foeHp: number;
+      foeHpMax: number;
+      round: number;
+      retried: boolean;
+    } | null;
   } | null;
   /** 말을 걸어오려고 대기 중인 인물 (§7.3 다가옴 구조) */
   pendingApproach: string[];

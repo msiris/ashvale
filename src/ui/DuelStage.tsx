@@ -8,10 +8,11 @@
  * 이제 둘이 마주 서고, 고른 뒤 **때를 잡는 한 번**이 더 있고, 부딪히면 밀린다.
  *
  * 손이 하는 일:
- *   1. 기색을 읽고 자세를 고른다 (읽기)
- *   2. 겹치는 순간에 누른다 (때)
- * 때를 잡으면 결과가 한 단계 오른다. 놓쳐도 벌은 없다 — 손이 느린 것이
- * 잘못 읽은 것보다 나쁘면 읽는 일이 값을 잃는다.
+ *   1. 기색을 읽고 자세를 고른다 (읽기 — **방향**을 정한다)
+ *   2. 겹치는 순간에 누른다 (때 — **크기**를 정한다)
+ * 때를 잡으면 이길 때 더 깎고 맞을 때 덜 맞는다. **결과를 뒤집지는 않는다** —
+ * 뒤집게 뒀더니 일부러 지는 자세를 내고 때만 잡아도 이겨서,
+ * 기색을 읽는 일이 값을 잃었다.
  *
  * 규칙은 계산하지 않는다. `systems/duel.ts` 가 정하고 여기서는 보여만 준다.
  * 움직임을 줄여 둔 사람에게는 막대를 느리게 돌린다 — 없애지 않는다.
@@ -22,9 +23,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useGameStore } from '@/store/useGameStore';
 import { currentStage } from '@/systems/episodes';
 import {
-  DUEL_EDGE,
-  DUEL_ROUNDS,
+  MAX_ROUNDS,
   RETRY_FAVOR,
+  duelSettled,
   readsClearly,
   tellCandidates,
   type RoundOutcome,
@@ -67,32 +68,24 @@ interface Props {
 }
 
 /**
- * 기세. −2 부터 +2 까지 다섯 칸.
+ * 체력 게이지.
  *
- * 숫자로 적으면 또 숫자돌리기가 된다. 칸으로 보여야 지금 어느 쪽으로
- * 기울었는지가 한눈에 들어온다.
+ * 남은 만큼 줄어든다. 숫자도 함께 적는다 — 게이지만 보면 한 대에
+ * 얼마가 깎였는지 알 수 없어 자세를 고를 근거가 안 생긴다.
  */
-function Momentum({ track }: { track: number }) {
+function Health({ now, max, mine }: { now: number; max: number; mine: boolean }) {
+  const ratio = max <= 0 ? 0 : Math.max(0, Math.min(1, now / max));
   return (
-    <div className="flex items-center gap-1">
-      {[-2, -1, 0, 1, 2].map((slot) => {
-        const on = slot === track;
-        return (
-          <div
-            key={slot}
-            className={
-              'h-2 flex-1 rounded transition-colors ' +
-              (on
-                ? track > 0
-                  ? 'bg-gold'
-                  : track < 0
-                    ? 'bg-blood'
-                    : 'bg-inkSoft'
-                : 'bg-paperDim border border-stoneDark')
-            }
-          />
-        );
-      })}
+    <div>
+      <div className="h-2 overflow-hidden rounded border border-stoneDark bg-paperDim">
+        <div
+          className={'h-full transition-[width] duration-300 ' + (mine ? 'bg-grassDark' : 'bg-blood')}
+          style={{ width: `${ratio * 100}%` }}
+        />
+      </div>
+      <div className="mt-0.5 text-center text-[11px] tabular-nums text-inkSoft">
+        {now} / {max}
+      </div>
     </div>
   );
 }
@@ -195,14 +188,20 @@ export function DuelStage({ open, onPick, onRetry, onNext }: Props) {
 
   const favor = state.episodeRun?.favor ?? 0;
   const canRetry = !duel.retried && favor >= RETRY_FAVOR;
-  const settled = Math.abs(duel.track) >= DUEL_EDGE || duel.round >= DUEL_ROUNDS;
+  const settled = duelSettled(duel);
 
   const ally = escortOf(state);
   const allySprite = ally === null ? 'char.hero' : companionSprite(ally.archetypeId);
   const allyName = ally === null ? (state.hero.name === '' ? '나' : state.hero.name) : displayName(ally);
 
-  /** 부딪힌 만큼 몸이 밀린다. 기세가 그림으로 보여야 맞부딪힌 것이다 */
-  const push = duel.track * 6;
+  /**
+   * 부딪힌 만큼 몸이 밀린다.
+   *
+   * 남은 체력의 차이를 그대로 쓴다 — 밀어붙이고 있으면 앞으로 나가고,
+   * 몰리면 물러선다. 게이지 옆에 숫자만 있으면 맞부딪힌 것으로 안 보인다.
+   */
+  const lead = duel.hp / Math.max(1, duel.hpMax) - duel.foeHp / Math.max(1, duel.foeHpMax);
+  const push = Math.round(lead * 14);
 
   return (
     <>
@@ -215,14 +214,10 @@ export function DuelStage({ open, onPick, onRetry, onNext }: Props) {
           shift={push}
           dim={open.round?.outcome === 'lose'}
         />
-        <div className="flex-1 pb-1">
-          <Momentum track={duel.track} />
-          <p className="mt-1 text-center text-[11px] text-inkSoft">
-            {settled && open.round !== null
-              ? '겨룸이 끝났다'
-              : `${Math.min(duel.round + 1, DUEL_ROUNDS)} / ${DUEL_ROUNDS} 판`}
-          </p>
-        </div>
+        {/* 너무 길어지면 그 자리에서 갈린다. 몇 판째인지 알려 준다 */}
+        <p className="pb-6 text-center text-[11px] text-inkSoft">
+          {settled ? '끝났다' : `${duel.round + 1} / ${MAX_ROUNDS}판`}
+        </p>
         <CharBust
           label={boss.name}
           facing="left"
@@ -230,9 +225,16 @@ export function DuelStage({ open, onPick, onRetry, onNext }: Props) {
           dim={open.round?.outcome === 'win'}
         />
       </div>
-      <div className="mt-1 flex justify-between text-[11px] text-inkSoft">
-        <span>{allyName}</span>
-        <span>{boss.name}</span>
+
+      <div className="mt-1 flex items-start gap-3">
+        <div className="flex-1">
+          <div className="mb-0.5 text-[11px] text-inkSoft">{allyName}</div>
+          <Health now={duel.hp} max={duel.hpMax} mine />
+        </div>
+        <div className="flex-1">
+          <div className="mb-0.5 text-right text-[11px] text-inkSoft">{boss.name}</div>
+          <Health now={duel.foeHp} max={duel.foeHpMax} mine={false} />
+        </div>
       </div>
 
       {/* ── 결과를 읽는 중 ── */}
