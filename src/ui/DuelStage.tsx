@@ -1,5 +1,9 @@
 /**
- * 마주섬 판 (§11 곁가지) — 맞부딪히는 자리.
+ * 마주섬 판 (§11) — 맞부딪히는 자리.
+ *
+ * **이야기의 마지막 판과 지역이 같은 화면을 쓴다.** 규칙이 같은데 화면을
+ * 둘로 두면 한쪽만 고치는 일이 생긴다. 그래서 여기는 상태를 읽지 않고
+ * 받은 것만 그린다 — 어디서 왔는지는 부르는 쪽이 안다.
  *
  * 규칙은 그대로다. 바뀐 것은 **보이는 것과 손이 하는 일**이다.
  *
@@ -21,16 +25,16 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useGameStore } from '@/store/useGameStore';
-import { currentStage } from '@/systems/episodes';
 import {
   MAX_ROUNDS,
-  RETRY_FAVOR,
   duelSettled,
   readsClearly,
   tellCandidates,
+  type DuelState,
   type RoundOutcome,
   type Timing,
 } from '@/systems/duel';
+import type { EpisodeBoss } from '@/data/content/episodes';
 import {
   STANCES,
   STANCE_HINT,
@@ -43,9 +47,6 @@ import {
   TIMING_PROMPT,
   type Stance,
 } from '@/data/content/duel-text';
-import { companionSprite } from '@/data/sprites';
-import { escortOf } from '@/systems/escort';
-import { displayName } from '@/systems/relationships';
 import { TOUCH_MIN } from '@/data/layout';
 import { useReducedMotion } from './useReducedMotion';
 import { CharBust } from './CharBust';
@@ -57,11 +58,27 @@ const SWEEP_MS_SLOW = 2200;
 /** 가운데에서 이 안쪽이면 잡은 것으로 본다 (0~1 중 비율) */
 const HIT_WINDOW = 0.12;
 
+export interface DuelRound {
+  mine: Stance;
+  theirs: Stance;
+  outcome: RoundOutcome;
+  line: string;
+}
+
 interface Props {
-  open: {
-    text: string;
-    round: { mine: Stance; theirs: Stance; outcome: RoundOutcome; line: string } | null;
-  };
+  /** 마주선 것 — 이름·기색을 읽을 능력치·난도 */
+  foe: EpisodeBoss;
+  duel: DuelState;
+  /** 첫 판에 보여 줄 한 문단 */
+  intro: string;
+  /** 방금 오간 판. null 이면 고르는 중이다 */
+  round: DuelRound | null;
+  /** 기색을 좁히는 데 쓰는 열쇠. 이야기면 그 id, 지역이면 지역 id */
+  seedId: string;
+  allySprite: string;
+  allyName: string;
+  /** 되돌리기를 쓸 수 있는가. 이야기에서만 쓴다 */
+  canRetry: boolean;
   onPick: (stance: Stance, timing: Timing) => void;
   onRetry: () => void;
   onNext: () => void;
@@ -169,7 +186,19 @@ function TimingBar({ stance, onDone }: { stance: Stance; onDone: (t: Timing) => 
   );
 }
 
-export function DuelStage({ open, onPick, onRetry, onNext }: Props) {
+export function DuelStage({
+  foe,
+  duel,
+  intro,
+  round,
+  seedId,
+  allySprite,
+  allyName,
+  canRetry,
+  onPick,
+  onRetry,
+  onNext,
+}: Props) {
   const state = useGameStore((s) => s.state);
   /** 자세를 고른 뒤 때를 재는 중. 화면에만 있는 값이라 스토어에 넣지 않는다 */
   const [aiming, setAiming] = useState<Stance | null>(null);
@@ -177,22 +206,12 @@ export function DuelStage({ open, onPick, onRetry, onNext }: Props) {
 
   // 판이 넘어가면 겨냥을 놓는다
   useEffect(() => {
-    if (open.round !== null) setAiming(null);
-  }, [open.round]);
+    if (round !== null) setAiming(null);
+  }, [round]);
 
   if (state === null) return null;
-  const here = currentStage(state);
-  const boss = here?.stage.boss;
-  const duel = state.episodeRun?.duel;
-  if (here == null || boss === undefined || duel == null) return null;
 
-  const favor = state.episodeRun?.favor ?? 0;
-  const canRetry = !duel.retried && favor >= RETRY_FAVOR;
   const settled = duelSettled(duel);
-
-  const ally = escortOf(state);
-  const allySprite = ally === null ? 'char.hero' : companionSprite(ally.archetypeId);
-  const allyName = ally === null ? (state.hero.name === '' ? '나' : state.hero.name) : displayName(ally);
 
   /**
    * 부딪힌 만큼 몸이 밀린다.
@@ -212,18 +231,13 @@ export function DuelStage({ open, onPick, onRetry, onNext }: Props) {
           label={allyName}
           facing="right"
           shift={push}
-          dim={open.round?.outcome === 'lose'}
+          dim={round?.outcome === 'lose'}
         />
         {/* 너무 길어지면 그 자리에서 갈린다. 몇 판째인지 알려 준다 */}
         <p className="pb-6 text-center text-[11px] text-inkSoft">
           {settled ? '끝났다' : `${duel.round + 1} / ${MAX_ROUNDS}판`}
         </p>
-        <CharBust
-          label={boss.name}
-          facing="left"
-          shift={-push}
-          dim={open.round?.outcome === 'win'}
-        />
+        <CharBust label={foe.name} facing="left" shift={-push} dim={round?.outcome === 'win'} />
       </div>
 
       <div className="mt-1 flex items-start gap-3">
@@ -232,20 +246,20 @@ export function DuelStage({ open, onPick, onRetry, onNext }: Props) {
           <Health now={duel.hp} max={duel.hpMax} mine />
         </div>
         <div className="flex-1">
-          <div className="mb-0.5 text-right text-[11px] text-inkSoft">{boss.name}</div>
+          <div className="mb-0.5 text-right text-[11px] text-inkSoft">{foe.name}</div>
           <Health now={duel.foeHp} max={duel.foeHpMax} mine={false} />
         </div>
       </div>
 
       {/* ── 결과를 읽는 중 ── */}
-      {open.round !== null ? (
+      {round !== null ? (
         <>
           <p className="mt-2 font-serif text-[13px] leading-relaxed">
             {timing !== null ? `${timing === 'hit' ? TIMING_HIT : TIMING_MISS} ` : ''}
-            {open.round.line}
+            {round.line}
           </p>
           <p className="mt-1 text-[11px] text-inkSoft">
-            {STANCE_LABEL[open.round.mine]} 대 {STANCE_LABEL[open.round.theirs]}
+            {STANCE_LABEL[round.mine]} 대 {STANCE_LABEL[round.theirs]}
           </p>
           <div className="mt-3 space-y-1">
             <button
@@ -263,7 +277,7 @@ export function DuelStage({ open, onPick, onRetry, onNext }: Props) {
                 style={{ minHeight: TOUCH_MIN }}
                 className="w-full rounded border border-stoneDark bg-paperDim text-[12px]"
               >
-                숨을 고른다 · 방금 것을 없던 일로 (결 {RETRY_FAVOR} 소모, 한 번)
+                숨을 고른다 · 방금 것을 없던 일로 (한 번)
               </button>
             )}
           </div>
@@ -281,13 +295,13 @@ export function DuelStage({ open, onPick, onRetry, onNext }: Props) {
         /* ── 자세를 고르는 중 ── */
         <>
           {duel.round === 0 && (
-            <p className="mt-2 font-serif text-[13px] leading-relaxed">{open.text}</p>
+            <p className="mt-2 font-serif text-[13px] leading-relaxed">{intro}</p>
           )}
           <p className="mt-2 text-[11px] text-inkSoft">
-            {readsClearly(state, boss) ? TELL_CLEAR : TELL_VAGUE}
+            {readsClearly(state, foe) ? TELL_CLEAR : TELL_VAGUE}
           </p>
           <div className="mt-1 rounded border border-stoneDark bg-paperDim px-2 py-1">
-            {tellCandidates(state, boss, here.episode.id, duel.round).map((c) => (
+            {tellCandidates(state, foe, seedId, duel.round).map((c) => (
               <p key={c} className="font-serif text-[12px] leading-snug">
                 {TELL[c][duel.round % TELL[c].length]}
               </p>

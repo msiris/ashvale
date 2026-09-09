@@ -186,3 +186,35 @@ export function drawOfferBadge(ctx: CanvasRenderingContext2D): void {
 export function drawReportBadge(ctx: CanvasRenderingContext2D): void {
   drawBang(ctx, PALETTE.grassLight);
 }
+
+/**
+ * 마주설 것 (§11).
+ *
+ * 전리품 표식과 **다르게 보여야 한다** — 같아 보이면 모르고 밟는다.
+ * 밟으면 겨룸이 시작되고, 시작하면 물러날 데가 없다.
+ * 붉은 쐐기 둘을 마주 세운다. 부딪히기 직전의 모양이다.
+ */
+export function drawFoeMarker(ctx: CanvasRenderingContext2D): void {
+  ctx.clearRect(0, 0, S, S);
+  const mid = S / 2;
+
+  ctx.fillStyle = PALETTE.blood;
+  // 왼쪽에서 오는 것
+  ctx.beginPath();
+  ctx.moveTo(2, mid - 4);
+  ctx.lineTo(mid - 1, mid);
+  ctx.lineTo(2, mid + 4);
+  ctx.closePath();
+  ctx.fill();
+  // 오른쪽에서 오는 것
+  ctx.beginPath();
+  ctx.moveTo(S - 2, mid - 4);
+  ctx.lineTo(mid + 1, mid);
+  ctx.lineTo(S - 2, mid + 4);
+  ctx.closePath();
+  ctx.fill();
+
+  // 부딪히는 자리
+  ctx.fillStyle = PALETTE.paper;
+  ctx.fillRect(mid - 1, mid - 1, 2, 2);
+}

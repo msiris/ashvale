@@ -35,6 +35,7 @@ import {
   drawSpentMarker,
   drawSpotMarker,
   drawEscortMarker,
+  drawFoeMarker,
   drawOfferBadge,
   drawReportBadge,
 } from '@/render/markers';
@@ -474,6 +475,7 @@ export class FieldScene extends Phaser.Scene {
     this.ensureMarkerTexture('marker:spent', drawSpentMarker);
     this.ensureMarkerTexture('marker:spot', drawSpotMarker);
     this.ensureMarkerTexture('marker:escort', drawEscortMarker);
+    this.ensureMarkerTexture('marker:foe', drawFoeMarker);
     this.ensureMarkerTexture('badge:offer', drawOfferBadge);
     this.ensureMarkerTexture('badge:report', drawReportBadge);
 
@@ -500,12 +502,18 @@ export class FieldScene extends Phaser.Scene {
 
     for (const obj of map.objects) {
       if (obj.nodeKind === undefined) continue;
+      /**
+       * 마주설 것은 **붉게** 세운다 (§11).
+       * 전리품 표식과 같아 보이면 모르고 밟는다 — 밟으면 겨룸이 시작된다.
+       */
       const key =
         obj.nodeKind === 'loot'
           ? 'marker:loot'
           : obj.nodeKind === 'escort'
             ? 'marker:escort'
-            : 'marker:event';
+            : obj.nodeKind === 'foe'
+              ? 'marker:foe'
+              : 'marker:event';
       const sprite = this.add.image(worldX(obj.x), worldY(obj.y), key);
       sprite.setOrigin(0.5, 1);
       sprite.setDepth(worldY(obj.y) - 1);

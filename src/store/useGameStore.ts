@@ -65,6 +65,7 @@ import {
   fillEpisodeText,
   isLastStage,
 } from '@/systems/episodes';
+import { foeOf } from '@/data/content/region-foes';
 import {
   RETRY_FAVOR,
   blowFor,
@@ -376,6 +377,22 @@ interface GameStore {
   /** 마주섬을 다시 한다. 겨룸을 새로 세운다 */
   retryBoss: () => void;
 
+  /**
+   * 지역에서 마주선 창 (§11).
+   *
+   * 이야기의 마주섬과 **같은 규칙**이다. 겨룸 자체는 `world.regionDuel` 에
+   * 있고 여기는 화면에 뜬 것만 든다.
+   */
+  regionDuel: {
+    round: { mine: Stance; theirs: Stance; outcome: RoundOutcome; line: string } | null;
+    result: { won: boolean; line: string; spoils: string } | null;
+  } | null;
+  /** 마주섬 표식을 밟았다 */
+  startRegionDuel: (nodeId: string) => void;
+  pickRegionStance: (stance: Stance, timing?: Timing) => void;
+  nextRegionRound: () => void;
+  closeRegionDuel: () => void;
+
   /** 노드를 밟았다 → 판정 */
   stepNode: (nodeId: string) => void;
   closeExplore: () => void;
@@ -493,6 +510,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   outing: null,
   regionEvent: null,
   episode: null,
+  regionDuel: null,
   stuck: false,
   room: null,
   regionSelect: false,
@@ -1304,9 +1322,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
           currentMap: 'town',
           heroTile: { ...START_HERO_TILE },
           clearedNodes: [],
+          // 지역을 나오면 마주섬도 접힌다. 마을까지 들고 오지 않는다
+          regionDuel: null,
         },
       },
           explore: null,
+          regionDuel: null,
     });
     void get().save('map-change');
   },
@@ -2062,6 +2083,140 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return;
     }
     set({ episode: null });
+  },
+
+  /**
+   * 지역에서 마주선다 (§11).
+   *
+   * 이미 겨루던 중이면 그 자리에서 이어진다 — 몰릴 때마다 새로고침해서
+   * 체력을 되찾을 수 없어야 한다.
+   */
+  startRegionDuel(nodeId) {
+    const { state } = get();
+    if (state === null || get().regionDuel !== null) return;
+    const regionId = regionIdFromMap(state.world.currentMap);
+    const foe = regionId === null ? null : foeOf(regionId);
+    if (foe === null) return;
+    // 이미 물리친 표식이면 아무 일도 없다
+    if (state.world.clearedNodes.includes(nodeId)) return;
+
+    const duel = state.world.regionDuel;
+    const fresh = duel === null || duel.nodeId !== nodeId;
+    set({
+      state: fresh
+        ? { ...state, world: { ...state.world, regionDuel: { nodeId, ...startDuel(state, foe) } } }
+        : state,
+      regionDuel: { round: null, result: null },
+    });
+    void get().save('turn-end');
+  },
+
+  pickRegionStance(stance, timing = 'miss') {
+    const open = get().regionDuel;
+    const { state } = get();
+    if (open === null || open.round !== null || open.result !== null || state === null) return;
+
+    const regionId = regionIdFromMap(state.world.currentMap);
+    const foe = regionId === null ? null : foeOf(regionId);
+    const duel = state.world.regionDuel;
+    if (foe === null || duel === null) return;
+    play('choose');
+
+    const theirs = theirStance(state, regionId!, duel.round);
+    const outcome = judge(stance, theirs);
+    const blow = blowFor(state, foe, outcome, timing);
+
+    const body =
+      outcome === 'win'
+        ? ROUND_WIN[stance]
+        : outcome === 'lose'
+          ? ROUND_LOSE[theirs]
+          : (ROUND_DRAW[duel.round % ROUND_DRAW.length] ?? ROUND_DRAW[0] ?? '');
+    const tally =
+      blow.toFoe > 0 ? ` ${foe.name} −${blow.toFoe}` : blow.toMe > 0 ? ` 이쪽 −${blow.toMe}` : '';
+
+    set({
+      state: {
+        ...state,
+        world: {
+          ...state.world,
+          regionDuel: {
+            ...duel,
+            hp: Math.max(0, duel.hp - blow.toMe),
+            foeHp: Math.max(0, duel.foeHp - blow.toFoe),
+            round: duel.round + 1,
+          },
+        },
+      },
+      regionDuel: { ...open, round: { mine: stance, theirs, outcome, line: body + tally } },
+    });
+    void get().save('turn-end');
+  },
+
+  /**
+   * 결과를 읽었다 → 다음 판. 갈렸으면 끝을 낸다.
+   *
+   * 이기면 표식이 치워지고 전리품이 붙는다. 지면 기력을 잃고 물러난다 —
+   * **죽지 않는다.** 표식은 남으므로 몸을 추스르고 다시 설 수 있다.
+   */
+  nextRegionRound() {
+    const open = get().regionDuel;
+    const { state } = get();
+    if (open === null || open.round === null || state === null) return;
+
+    const regionId = regionIdFromMap(state.world.currentMap);
+    const foe = regionId === null ? null : foeOf(regionId);
+    const duel = state.world.regionDuel;
+    if (foe === null || duel === null) return;
+
+    if (!duelSettled(duel)) {
+      set({ regionDuel: { ...open, round: null } });
+      return;
+    }
+
+    const won = duelWon(duel);
+    let next = state;
+    let spoils = '';
+
+    if (won) {
+      const gained = gainXp(
+        {
+          ...next,
+          resources: { ...next.resources, gold: next.resources.gold + foe.spoils.gold },
+          world: {
+            ...next.world,
+            regionDuel: null,
+            clearedNodes: [...next.world.clearedNodes, duel.nodeId],
+          },
+        },
+        foe.spoils.xp,
+      );
+      next = gained.state;
+      spoils = `금화 +${foe.spoils.gold} · 경험 +${foe.spoils.xp}`;
+    } else {
+      next = {
+        ...next,
+        hero: { ...next.hero, hp: Math.max(0, next.hero.hp - foe.risk) },
+        // 표식은 남긴다. 다시 설 수 있어야 한다
+        world: { ...next.world, regionDuel: null },
+      };
+      spoils = `기력 −${foe.risk}`;
+    }
+
+    const line = won ? foe.win : foe.lose;
+    next = {
+      ...next,
+      chronicle: appendEntries(next.chronicle, [
+        makeEntry(next.world.turn, next.chronicle.length, line),
+      ]),
+    };
+
+    set({ state: next, regionDuel: { round: null, result: { won, line, spoils } } });
+    void get().save('turn-end');
+  },
+
+  closeRegionDuel() {
+    set({ regionDuel: null });
   },
 
   leaveEpisode() {

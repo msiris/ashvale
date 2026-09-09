@@ -25,6 +25,8 @@ import {
   theirStance,
   type DuelState,
 } from '../src/systems/duel';
+import { foeOf } from '../src/data/content/region-foes';
+import { REGIONS } from '../src/data/regions';
 import { newGame } from '../src/systems/newGame';
 import { migrate } from '../src/storage/migrate';
 import { SCHEMA_VERSION } from '../src/data/save';
@@ -221,6 +223,36 @@ const avg = roundSum / total;
 console.log(`  잘 읽었을 때 걸린 판: 평균 ${avg.toFixed(1)} · 최대 ${roundMax}`);
 if (avg < 2.5) throw new Error('두어 번에 끝난다 — 읽을 기회가 없다');
 if (roundMax >= MAX_ROUNDS) throw new Error('제대로 읽었는데도 판 수 상한까지 간다');
+
+// 5b. 지역에도 마주설 것이 있고, 그 지역 난도를 따라가는가
+const REGIONS_IDS = ['whisper', 'gate', 'marsh', 'peaks', 'deep', 'rift'];
+for (const id of REGIONS_IDS) {
+  const foe = foeOf(id);
+  if (foe === null) throw new Error(`${id}: 마주설 것이 없다`);
+  const region = REGIONS.find((r) => r.id === id);
+  if (region === undefined) throw new Error(`${id}: 지역이 없다`);
+  if (foe.difficulty !== region.difficulty) {
+    throw new Error(`${id}: 마주섬 난도 ${foe.difficulty} 가 지역 난도 ${region.difficulty} 와 다르다`);
+  }
+  if (foe.spoils.xp <= 0 || foe.spoils.gold <= 0) throw new Error(`${id}: 이겨도 받는 게 없다`);
+}
+console.log(`  지역 마주섬 ${REGIONS_IDS.length}곳 · 난도가 지역과 맞는다`);
+
+/** 지역 마주섬도 읽으면 이기고 안 읽으면 진다 */
+let regionRead = 0;
+let regionDull = 0;
+for (const id of REGIONS_IDS) {
+  const foe = foeOf(id)!;
+  for (let turn = 1; turn <= 40; turn++) {
+    const st: GameState = { ...base, world: { ...base.world, turn }, episodeRun: null };
+    if (runDuel(st, id, foe, readWell(st, id)).won) regionRead += 1;
+    if (runDuel(st, id, foe, () => 'hold').won) regionDull += 1;
+  }
+}
+const rTotal = REGIONS_IDS.length * 40;
+console.log(`  지역 · 제대로 읽음 ${regionRead}/${rTotal} · '버틴다' 만 ${regionDull}/${rTotal}`);
+if (regionRead < rTotal * 0.85) throw new Error('지역에서 제대로 읽었는데도 자주 진다');
+if (regionDull >= regionRead) throw new Error('지역에서 읽어도 이득이 없다');
 
 // 6. 같은 판에서 자세가 흔들리지 않는다
 const fixed: GameState = { ...base, world: { ...base.world, turn: 7 } };

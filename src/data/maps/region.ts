@@ -140,6 +140,27 @@ export function buildRegionMap(regionId: string, escort = false, visit = 0): Til
     { id: 'exit', type: 'gateway', x: ENTRY_X, y: H - 1, target: 'town', solid: false },
   ];
 
+  /**
+   * 마주설 것 하나 (§11).
+   *
+   * 지역은 표식을 밟고 판정을 굴리는 자리였다. 매주 가는 데인데 거기서
+   * 마주설 일이 없었다. **하나만 둔다** — 여럿과 연달아 맞서지 않는다.
+   *
+   * 등뼈 위쪽, 입구에서 먼 데에 세운다. 들어서자마자 부딪히면
+   * 지역을 둘러볼 일이 없다.
+   */
+  const foeY = Math.max(2, spineTop - 1);
+  collision[at(ENTRY_X, foeY)] = false;
+  put(ENTRY_X, foeY, 'path', false);
+  objects.push({
+    id: 'foe',
+    type: 'node',
+    x: ENTRY_X,
+    y: foeY,
+    solid: false,
+    nodeKind: 'foe',
+  });
+
   spots.forEach((spot, i) => {
     // 길 위에 놓았으니 막힐 일이 없다
     collision[at(spot.x, spot.y)] = false;

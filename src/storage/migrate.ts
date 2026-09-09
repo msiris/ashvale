@@ -113,6 +113,12 @@ const MIGRATIONS: Record<number, Migration> = {
     const run = isRecord(raw['episodeRun']) ? { ...raw['episodeRun'], duel: null } : null;
     return { ...raw, schemaVersion: 12, episodeRun: run };
   },
+
+  /** 12 -> 13: world.regionDuel 추가. 지역에서도 마주서게 됐다 */
+  12: (raw) => {
+    const world = isRecord(raw['world']) ? raw['world'] : {};
+    return { ...raw, schemaVersion: 13, world: { ...world, regionDuel: null } };
+  },
 };
 
 export type MigrateResult =

@@ -14,6 +14,10 @@ import { currentStage, isLastStage, isRecall } from '@/systems/episodes';
 import { HOLD_TRADE_BONUS, TRIBUTE_MULTIPLIER } from '@/data/faction-holds';
 import { TOUCH_MIN } from '@/data/layout';
 import { DuelStage } from './DuelStage';
+import { RETRY_FAVOR, startDuel } from '@/systems/duel';
+import { companionSprite } from '@/data/sprites';
+import { escortOf } from '@/systems/escort';
+import { displayName } from '@/systems/relationships';
 import { SceneStage } from './SceneStage';
 
 /** 문단 사이를 띄운다. 서술이 한 덩어리로 붙으면 읽히지 않는다 */
@@ -85,8 +89,33 @@ export function EpisodePanel() {
           <SceneStage result={open.result} onChoose={choose} onClose={close} />
         )}
 
-        {open.kind === 'boss' && open.result === null && (
-          <DuelStage open={open} onPick={pick} onRetry={retry} onNext={next} />
+        {open.kind === 'boss' && open.result === null && here.stage.boss !== undefined && (
+          <DuelStage
+            foe={here.stage.boss}
+            duel={state.episodeRun?.duel ?? startDuel(state, here.stage.boss)}
+            intro={open.text}
+            round={open.round}
+            seedId={here.episode.id}
+            allySprite={
+              escortOf(state) === null
+                ? 'char.hero'
+                : companionSprite(escortOf(state)!.archetypeId)
+            }
+            allyName={
+              escortOf(state) === null
+                ? state.hero.name === ''
+                  ? '나'
+                  : state.hero.name
+                : displayName(escortOf(state)!)
+            }
+            canRetry={
+              state.episodeRun?.duel?.retried === false &&
+              (state.episodeRun?.favor ?? 0) >= RETRY_FAVOR
+            }
+            onPick={pick}
+            onRetry={retry}
+            onNext={next}
+          />
         )}
 
         {open.kind === 'boss' && open.result !== null && (

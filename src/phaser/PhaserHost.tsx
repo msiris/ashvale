@@ -84,6 +84,8 @@ export function PhaserHost() {
         if (object.nodeKind !== undefined) {
           // 에피소드 판의 이야기 자리는 판정이 아니라 고르는 자리다 (§11 곁가지)
           if (object.id === 'episode-scene') store.openEpisodeScene();
+          // 지역에서 마주설 것 (§11). 판정이 아니라 겨룸이다
+          else if (object.nodeKind === 'foe') store.startRegionDuel(object.id);
           else store.stepNode(object.id);
           return;
         }
@@ -170,6 +172,7 @@ export function PhaserHost() {
         if (object.nodeKind === undefined) return;
         // 에피소드 판의 이야기 자리는 밟으면 열린다 (§11 곁가지)
         if (object.id === 'episode-scene') useGameStore.getState().openEpisodeScene();
+        else if (object.nodeKind === 'foe') useGameStore.getState().startRegionDuel(object.id);
         else useGameStore.getState().stepNode(object.id);
       },
       onApproachArrive: () => useGameStore.getState().approachArrived(),

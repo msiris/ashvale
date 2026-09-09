@@ -64,6 +64,7 @@ export function newGame(input: NewGameInput): GameState {
       heroTile: { ...START_HERO_TILE },
       clearedNodes: [],
       steppedTiles: [],
+      regionDuel: null,
       clearedEpisodes: [],
       factionHolds: {},
     },

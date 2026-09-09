@@ -143,6 +143,23 @@ export interface WorldState {
    */
   steppedTiles: string[];
   /**
+   * 지역에서 마주선 것 (§11).
+   *
+   * 이야기의 마주섬과 같은 규칙이라 같은 모양을 쓴다. **세션에 둘 수 없다** —
+   * 몰릴 때마다 새로고침하면 체력이 도로 찬다.
+   * 마을로 돌아오거나 물리치면 비운다.
+   */
+  regionDuel: {
+    /** 어느 표식에서 만났는가. 물리치면 그 표식이 치워진다 */
+    nodeId: string;
+    hp: number;
+    hpMax: number;
+    foeHp: number;
+    foeHpMax: number;
+    round: number;
+    retried: boolean;
+  } | null;
+  /**
    * 끝낸 동화 에피소드 (§11 곁가지).
    *
    * **§4 에 없던 칸이다.** 세션에만 두면 새로고침으로 같은 이야기를
@@ -186,7 +203,7 @@ export interface Counters {
 }
 
 export interface GameState {
-  schemaVersion: 12;
+  schemaVersion: 13;
   createdAt: number;
 
   hero: HeroState;

@@ -81,7 +81,7 @@ export interface MapObject {
   /** 건물 부지면 그 건물 id. 여기 서서 A 를 누르면 건설·증축 패널이 열린다 (§10) */
   building?: string;
   /** 지역 사건 노드의 종류 (§11). 밟으면 판정이 돈다 */
-  nodeKind?: 'loot' | 'event' | 'escort';
+  nodeKind?: 'loot' | 'event' | 'escort' | 'foe';
   /** 시장 판매대. 여기 서서 A 를 누르면 교역·선물 (§10) */
   shop?: boolean;
   /** 실내의 목적 자리 (§10). 여기 서서 A 를 누르면 그 건물이 하는 일이 열린다 */
