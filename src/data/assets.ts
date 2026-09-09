@@ -90,9 +90,17 @@ const CHARACTERS: AssetEntry[] = CHAR_ROSTER.map((slot, i) => ({
     label: slot.bind === '*' ? `${slot.role} 예비` : slot.bind,
     color: ROLE_COLOR[slot.role],
   },
+  /**
+   * 처음에는 CC0 팩(piano_no_renshu)을 썼는데, 지금 쓰는 열다섯 장은
+   * **이 프로젝트에서 생성형으로 직접 만든 것**이다. 밖에서 받아 온 것이
+   * 아니므로 표기할 제3자가 없다.
+   *
+   * 외부 팩은 CC0 만 쓴다는 정책(docs/ASSETS.md)은 **표기 관리 비용을 없애려는
+   * 것**이라, 자체 제작물은 그 취지에 어긋나지 않는다.
+   */
   license: {
-    source: 'https://piano-no-renshu.itch.io/top-down-character-sprites',
-    type: 'CC0-1.0',
+    source: '자체 제작 — 생성형(Gemini)으로 만들고 파이프라인에서 규격을 맞췄다',
+    type: '자체 제작',
   },
 }));
 

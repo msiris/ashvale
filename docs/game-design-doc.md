@@ -565,9 +565,11 @@ margin = roll − 지역.난이도
 
 | 용도 | 팩 | 라이선스 |
 |---|---|---|
-| **캐릭터 15종 (4방향 걷기)** | 15 Top-Down Character Sprites (piano_no_renshu) | CC0 |
+| **캐릭터 15종 (4방향 걷기)** | 자체 제작 (생성형) | 자체 제작 — 표기할 제3자 없음 |
 
-확보 완료. 경로 `raw-assets/characters/` (내려받은 zip이 `pack/pack`으로 겹쳐 있으면 한 단계 위로 꺼낼 것)
+확보 완료. 경로 `raw-assets/characters/`, `npm run assets` 로 굽는다.
+처음에는 15 Top-Down Character Sprites (piano_no_renshu, CC0) 를 썼고
+`raw-assets/characters/pack/` 에 남아 있다. 상세는 `docs/ASSETS.md`.
 
 | 지형·건물·마을 | Kenney Tiny Town | CC0 |
 | 실내·던전 | Kenney Tiny Dungeon | CC0 |
