@@ -21,6 +21,7 @@ import {
   startTrack,
   tellCandidates,
   theirStance,
+  upgradeOutcome,
 } from '../src/systems/duel';
 import { newGame } from '../src/systems/newGame';
 import { migrate } from '../src/storage/migrate';
@@ -146,6 +147,45 @@ console.log(`  ${hardest.title} · 눈이 어두운 판 ${dimVague}/200 · 그�
 if (dimVague < 190) throw new Error('시작 능력치로도 가장 어려운 상대가 다 읽힌다');
 if (dimWins > 160) throw new Error('둘 중 하나를 찍어도 너무 잘 이긴다');
 if (dimWins < 20) throw new Error('눈이 어두우면 손쓸 데가 없다');
+
+// 3c. 때를 잡으면 한 단계 오르고, 놓치면 그대로다
+if (upgradeOutcome('lose', 'hit') !== 'draw') throw new Error('때를 잡았는데 밀린 채다');
+if (upgradeOutcome('draw', 'hit') !== 'win') throw new Error('때를 잡았는데 팽팽한 채다');
+if (upgradeOutcome('win', 'hit') !== 'win') throw new Error('앞선 것이 더 올라간다');
+for (const o of ['win', 'lose', 'draw'] as const) {
+  if (upgradeOutcome(o, 'miss') !== o) throw new Error('놓쳤는데 결과가 달라진다');
+}
+
+/**
+ * 때가 읽기를 대신하지는 못한다.
+ * 늘 잘못 읽고 늘 때만 잡는 사람이 늘 잘 읽는 사람보다 나으면 안 된다.
+ */
+let timedOnly = 0;
+for (const e of ALL_EPISODES) {
+  const boss = bossOf(e.id);
+  if (boss === undefined) continue;
+  for (let turn = 1; turn <= 40; turn++) {
+    const s2: GameState = {
+      ...base,
+      world: { ...base.world, turn },
+      episodeRun: { episodeId: e.id, stage: 4, favor: 0, seen: [], duel: null },
+    };
+    let track = startTrack(s2);
+    let round = 0;
+    while (!duelSettled(track, round)) {
+      const theirs = theirStance(s2, e.id, round);
+      // 일부러 지는 자세를 고르고, 때는 늘 잡는다
+      const worst = STANCES.find((x) => judge(x, theirs) === 'lose') ?? 'hold';
+      const out = upgradeOutcome(judge(worst, theirs), 'hit');
+      track += out === 'win' ? 1 : out === 'lose' ? -1 : 0;
+      track = Math.max(-DUEL_EDGE, Math.min(DUEL_EDGE, track));
+      round += 1;
+    }
+    if (duelWon(track)) timedOnly += 1;
+  }
+}
+console.log(`  못 읽고 때만 잡음: ${timedOnly}/${total} 승`);
+if (timedOnly >= readWins) throw new Error('때만 잡아도 읽는 것만큼 이긴다 — 읽는 일이 값을 잃는다');
 
 // 4. 같은 판에서 자세가 흔들리지 않는다
 const fixed: GameState = { ...base, world: { ...base.world, turn: 7 } };

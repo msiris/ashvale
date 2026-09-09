@@ -96,5 +96,14 @@ export const TRACK_TEXT: Record<number, string> = {
   [-2]: '한 걸음 밀렸다.',
 };
 
+/** 맞부딪히는 순간을 잡았을 때. 결과 앞에 붙는다 */
+export const TIMING_HIT = '때를 맞췄다.';
+
+/** 놓쳤을 때. 벌이 없으므로 나무라지 않는다 */
+export const TIMING_MISS = '반 박자 늦었다.';
+
+/** 타이밍 막대 위에 적는 말 */
+export const TIMING_PROMPT = '겹치는 순간에 누른다';
+
 /** 되돌리기를 쓸 때 */
 export const RETRY_TEXT = '숨을 고르고 다시 섰다. 방금 것은 없던 일로 했다.';

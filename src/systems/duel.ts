@@ -54,6 +54,28 @@ export function judge(mine: Stance, theirs: Stance): RoundOutcome {
   return BEATS[mine] === theirs ? 'win' : 'lose';
 }
 
+/** 맞부딪히는 순간을 제대로 잡았는가 */
+export type Timing = 'hit' | 'miss';
+
+/**
+ * 손이 결과를 한 단계 끌어올린다.
+ *
+ * 읽기만으로는 **고르고 나면 할 일이 없었다.** 자세를 누른 뒤 결과가
+ * 그냥 나오니 맞부딪히는 맛이 없다. 부딪히는 순간을 잡으면 한 단계 오른다.
+ *   밀림 → 팽팽
+ *   팽팽 → 앞섬
+ *   앞섬 → 앞섬 (더 오를 데가 없다)
+ *
+ * **놓쳐도 벌이 없다.** 원래 결과 그대로다 — 손이 느린 것이
+ * 잘못 읽은 것보다 나쁘면 읽는 일이 값을 잃는다.
+ */
+export function upgradeOutcome(outcome: RoundOutcome, timing: Timing): RoundOutcome {
+  if (timing !== 'hit') return outcome;
+  if (outcome === 'lose') return 'draw';
+  if (outcome === 'draw') return 'win';
+  return outcome;
+}
+
 /**
  * 이 판에서 상대가 취할 자세.
  *

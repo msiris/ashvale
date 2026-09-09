@@ -73,7 +73,9 @@ import {
   judge,
   startTrack,
   theirStance,
+  upgradeOutcome,
   type RoundOutcome,
+  type Timing,
 } from '@/systems/duel';
 import type { Stance } from '@/data/content/duel-text';
 import type { EpisodeStage } from '@/data/content/episodes';
@@ -346,8 +348,13 @@ interface GameStore {
   nextEpisodeStage: () => void;
   /** 마지막 판에서 마주선다 */
   faceEpisodeBoss: () => void;
-  /** 자세를 골라 한 판 겨룬다 */
-  pickStance: (stance: Stance) => void;
+  /**
+   * 자세를 골라 한 판 겨룬다.
+   *
+   * `timing` 은 맞부딪히는 순간을 잡았는지다 (§11 곁가지). 잡으면 결과가
+   * 한 단계 오른다 — 읽기만으로는 고르고 나면 할 일이 없었다.
+   */
+  pickStance: (stance: Stance, timing?: Timing) => void;
   /** 방금 판을 없던 일로 한다. 결 4 이상에서 한 번 */
   retryRound: () => void;
   /** 결과를 읽었다 → 다음 판, 또는 끝 */
@@ -1801,7 +1808,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
    * **주사위를 굴리지 않는다.** 상대의 자세는 이미 정해져 있고 기색으로
    * 미리 보여 줬다. 상성대로 갈린다 — 잘 읽었으면 앞서고 못 읽었으면 밀린다.
    */
-  pickStance(stance) {
+  pickStance(stance, timing = 'miss') {
     const open = get().episode;
     const { state } = get();
     if (open === null || open.kind !== 'boss') return;
@@ -1815,7 +1822,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     play('choose');
 
     const theirs = theirStance(state, here.episode.id, duel.round);
-    const outcome = judge(stance, theirs);
+    // 읽은 결과에 손이 한 단계를 얹는다
+    const outcome = upgradeOutcome(judge(stance, theirs), timing);
     const step = outcome === 'win' ? 1 : outcome === 'lose' ? -1 : 0;
     const track = Math.max(-DUEL_EDGE, Math.min(DUEL_EDGE, duel.track + step));
 

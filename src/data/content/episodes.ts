@@ -53,6 +53,13 @@ export interface EpisodeChoice {
 /** 판 한가운데의 이야기 자리 */
 export interface EpisodeScene {
   id: string;
+  /**
+   * 여기서 마주하는 상대의 이름.
+   *
+   * 있으면 화면에 마주 선다. **사람이 없는 자리는 비운다** —
+   * 둥지나 우리 앞에서 누군가 마주 서 있으면 거짓말이 된다.
+   */
+  speaker?: string;
   text: string;
   choices: EpisodeChoice[];
 }

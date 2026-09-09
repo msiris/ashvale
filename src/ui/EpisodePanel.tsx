@@ -10,25 +10,11 @@
  */
 
 import { useGameStore } from '@/store/useGameStore';
-import { currentStage, fillEpisodeText, isLastStage, isRecall } from '@/systems/episodes';
-import {
-  DUEL_EDGE,
-  DUEL_ROUNDS,
-  RETRY_FAVOR,
-  readsClearly,
-  tellCandidates,
-} from '@/systems/duel';
-import type { Stance } from '@/data/content/duel-text';
-import {
-  STANCES,
-  STANCE_HINT,
-  STANCE_LABEL,
-  TELL,
-  TELL_CLEAR,
-  TELL_VAGUE,
-} from '@/data/content/duel-text';
+import { currentStage, isLastStage, isRecall } from '@/systems/episodes';
 import { HOLD_TRADE_BONUS, TRIBUTE_MULTIPLIER } from '@/data/faction-holds';
 import { TOUCH_MIN } from '@/data/layout';
+import { DuelStage } from './DuelStage';
+import { SceneStage } from './SceneStage';
 
 /** 문단 사이를 띄운다. 서술이 한 덩어리로 붙으면 읽히지 않는다 */
 function Prose({ text }: { text: string }) {
@@ -95,52 +81,12 @@ export function EpisodePanel() {
           </>
         )}
 
-        {open.kind === 'scene' &&
-          (open.result === null ? (
-            <>
-              <p className="mt-2 font-serif text-[13px] leading-relaxed">
-                {fillEpisodeText(here.stage.scene?.text ?? '', state)}
-              </p>
-              <div className="mt-3 space-y-1">
-                {(here.stage.scene?.choices ?? []).map((choice, i) => (
-                  <button
-                    key={choice.text}
-                    type="button"
-                    onClick={() => choose(i)}
-                    style={{ minHeight: TOUCH_MIN }}
-                    className="w-full rounded border border-stoneDark bg-paperDim px-3 py-2 text-left text-[13px]"
-                  >
-                    {fillEpisodeText(choice.text, state)}
-                  </button>
-                ))}
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="mt-2 font-serif text-[13px] leading-relaxed">{open.result.result}</p>
-              {(open.result.notes.length > 0 || open.result.xp > 0) && (
-                <p className="mt-1 text-[11px] text-inkSoft">
-                  {[...open.result.notes, open.result.xp > 0 ? `경험 +${open.result.xp}` : '']
-                    .filter(Boolean)
-                    .join(' · ')}
-                </p>
-              )}
-              {open.result.levelUp !== null && (
-                <p className="mt-1 text-[11px] text-gold">단계가 올랐다</p>
-              )}
-              <button
-                type="button"
-                onClick={close}
-                style={{ minHeight: TOUCH_MIN }}
-                className="mt-3 w-full rounded border border-stoneDark bg-gold text-[13px] font-medium"
-              >
-                계속
-              </button>
-            </>
-          ))}
+        {open.kind === 'scene' && (
+          <SceneStage result={open.result} onChoose={choose} onClose={close} />
+        )}
 
         {open.kind === 'boss' && open.result === null && (
-          <DuelView open={open} onPick={pick} onRetry={retry} onNext={next} />
+          <DuelStage open={open} onPick={pick} onRetry={retry} onNext={next} />
         )}
 
         {open.kind === 'boss' && open.result !== null && (
@@ -235,141 +181,3 @@ export function EpisodePanel() {
     </div>
   );
 }
-
-/**
- * 저울. −2 부터 +2 까지 다섯 칸으로 보여 준다.
- *
- * 숫자로 적으면 또 숫자돌리기가 된다. **칸으로 보여야** 지금 어느 쪽으로
- * 기울었는지가 한눈에 들어온다.
- */
-function Scale({ track }: { track: number }) {
-  return (
-    <div className="mt-2 flex items-center gap-1">
-      {[-2, -1, 0, 1, 2].map((slot) => {
-        const on = slot === track;
-        return (
-          <div
-            key={slot}
-            className={
-              'h-2 flex-1 rounded ' +
-              (on
-                ? track > 0
-                  ? 'bg-gold'
-                  : track < 0
-                    ? 'bg-blood'
-                    : 'bg-inkSoft'
-                : 'bg-paperDim border border-stoneDark')
-            }
-          />
-        );
-      })}
-    </div>
-  );
-}
-
-interface DuelProps {
-  open: { text: string; round: { mine: Stance; theirs: Stance; outcome: string; line: string } | null };
-  onPick: (s: Stance) => void;
-  onRetry: () => void;
-  onNext: () => void;
-}
-
-/**
- * 마주섬 (§11 곁가지).
- *
- * 예전에는 「마주선다」 버튼 하나를 누르면 1d20 이 굴러 끝났다.
- * 누를 것이 하나뿐이라 **고르는 일이 없었다.**
- *
- * 이제 상대의 기색을 먼저 보여 주고 자세 셋 중에서 고르게 한다.
- * 눈이 밝으면 하나로 짚이고 모자라면 둘까지만 좁혀진다 —
- * 능력치가 결과를 굴리는 대신 **정보의 질을 산다.**
- */
-function DuelView({ open, onPick, onRetry, onNext }: DuelProps) {
-  const state = useGameStore((s) => s.state);
-  if (state === null) return null;
-
-  const here = currentStage(state);
-  const boss = here?.stage.boss;
-  const duel = state.episodeRun?.duel;
-  if (here === null || boss === undefined || duel === undefined || duel === null) return null;
-
-  const favor = state.episodeRun?.favor ?? 0;
-  const canRetry = !duel.retried && favor >= RETRY_FAVOR;
-  const settled = Math.abs(duel.track) >= DUEL_EDGE || duel.round >= DUEL_ROUNDS;
-
-  // 결과를 읽는 중
-  if (open.round !== null) {
-    return (
-      <>
-        <Scale track={duel.track} />
-        <p className="mt-2 font-serif text-[13px] leading-relaxed">{open.round.line}</p>
-        <p className="mt-1 text-[11px] text-inkSoft">
-          {STANCE_LABEL[open.round.mine]} 대 {STANCE_LABEL[open.round.theirs]}
-        </p>
-        <div className="mt-3 space-y-1">
-          <button
-            type="button"
-            onClick={onNext}
-            style={{ minHeight: TOUCH_MIN }}
-            className="w-full rounded border border-stoneDark bg-gold text-[13px] font-medium"
-          >
-            {settled ? '끝까지 본다' : '다시 마주선다'}
-          </button>
-          {canRetry && !settled && (
-            <button
-              type="button"
-              onClick={onRetry}
-              style={{ minHeight: TOUCH_MIN }}
-              className="w-full rounded border border-stoneDark bg-paperDim text-[12px]"
-            >
-              숨을 고른다 · 방금 것을 없던 일로 (결 {RETRY_FAVOR} 소모, 한 번)
-            </button>
-          )}
-        </div>
-      </>
-    );
-  }
-
-  // 자세를 고르는 중
-  const candidates = tellCandidates(state, boss, here.episode.id, duel.round);
-  const clear = readsClearly(state, boss);
-
-  return (
-    <>
-      {duel.round === 0 && (
-        <div className="mt-2">
-          <Prose text={open.text} />
-        </div>
-      )}
-      <Scale track={duel.track} />
-      <p className="mt-1 text-[11px] text-inkSoft">
-        {duel.round + 1} / {DUEL_ROUNDS} 판 · {clear ? TELL_CLEAR : TELL_VAGUE}
-      </p>
-
-      {/* 상대의 기색. 여기가 고르는 근거다 */}
-      <div className="mt-2 rounded border border-stoneDark bg-paperDim px-2 py-1">
-        {candidates.map((c) => (
-          <p key={c} className="font-serif text-[12px] leading-snug">
-            {TELL[c][duel.round % TELL[c].length]}
-          </p>
-        ))}
-      </div>
-
-      <div className="mt-3 space-y-1">
-        {STANCES.map((stance) => (
-          <button
-            key={stance}
-            type="button"
-            onClick={() => onPick(stance)}
-            style={{ minHeight: TOUCH_MIN }}
-            className="w-full rounded border border-stoneDark bg-paperDim px-3 py-2 text-left"
-          >
-            <div className="text-[13px] font-medium">{STANCE_LABEL[stance]}</div>
-            <div className="text-[11px] text-inkSoft">{STANCE_HINT[stance]}</div>
-          </button>
-        ))}
-      </div>
-    </>
-  );
-}
-
