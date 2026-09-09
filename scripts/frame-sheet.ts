@@ -17,7 +17,12 @@ import { PALETTE } from '../src/data/palette';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const which = process.argv[2] ?? '1';
-const src = resolve(HERE, `../raw-assets/characters/${which}.png`);
+/**
+ * **구워 놓은 쪽을 읽는다.** 원본은 늘 규격대로 들어오지 않는다 —
+ * JPEG 가 `.png` 이름으로 들어온 적이 있고, 그때 PNG 디코더가 그냥 죽었다.
+ * `copy-characters.ts` 가 맞춰 둔 것을 본다.
+ */
+const src = resolve(HERE, `../public/assets/characters/${String(which).padStart(2, '0')}.png`);
 const OUT = resolve(HERE, '../docs/assets');
 
 const SCALE = 5;

@@ -18,7 +18,12 @@ import { CHAR_SHEET, IDLE_FRAME, DIR_ROW } from '../src/data/characters';
 import { PALETTE } from '../src/data/palette';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const SRC = resolve(HERE, '../raw-assets/characters');
+/**
+ * **구워 놓은 쪽을 읽는다.** 예전에는 `raw-assets/characters` 를 직접 읽었는데,
+ * 원본이 늘 규격대로 들어오지는 않는다 — JPEG 가 `.png` 이름으로 들어온 적이 있고
+ * 그때 PNG 디코더가 그냥 죽었다. `copy-characters.ts` 가 규격으로 맞춰 둔 것을 본다.
+ */
+const SRC = resolve(HERE, '../public/assets/characters');
 const OUT = resolve(HERE, '../docs/assets');
 
 // ── PNG 읽기 ──────────────────────────────────────────────
@@ -226,7 +231,7 @@ function put(x: number, y: number, c: [number, number, number]): void {
 for (let y = 0; y < sheetH; y++) for (let x = 0; x < sheetW; x++) put(x, y, bg);
 
 for (let n = 1; n <= COUNT; n++) {
-  const bmp = decodePng(resolve(SRC, `${n}.png`));
+  const bmp = decodePng(resolve(SRC, `${String(n).padStart(2, '0')}.png`));
   const col = (n - 1) % COLS;
   const row = Math.floor((n - 1) / COLS);
   const ox = col * cellW + PAD;
